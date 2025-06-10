@@ -1,6 +1,3 @@
-function assert($: unknown): asserts $ {
-  if (!$) throw $;
-}
 /** Field types. */
 export const enum Width {
   // Variable-length fields - trailing zero bits hold element length.
@@ -36,6 +33,9 @@ export type Decoded = (
 export type Bytes<A> = A extends Byter<infer B>
   ? { [C in keyof B]: Decoded[B[C]] }
   : never;
+function assert($: unknown): asserts $ {
+  if (!$) throw $;
+}
 /** Fixed-length binary schema. */
 export class Byter<A extends readonly [Width, ...Width[]]> {
   private types;
