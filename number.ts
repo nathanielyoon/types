@@ -19,15 +19,13 @@ export const enum Width {
 /** Range of numbers from 0-31. */
 export type Word<A extends unknown[] = []> = A["length"] extends 32 ? A[number]
   : Word<[...A, A["length"]]>;
-/** Byte length brand for number types. */
-export declare const BYTES: unique symbol;
 /** Map of field widths to data types. */
 export type Decoded = (
   & { [_ in Width.PKEY]: Uint8Array }
   & { [_ in Width.BOOL]: boolean }
-  & { [_ in Width.UINT]: number & { [BYTES]: 4 } }
-  & { [_ in Width.TIME]: number & { [BYTES]: 7 } }
-  & { [_ in Width.REAL]: number & { [BYTES]: 8 } }
+  & { [_ in Width.UINT]: number }
+  & { [_ in Width.TIME]: number }
+  & { [_ in Width.REAL]: number }
   & { [_ in Width.NUMS]: Float64Array }
   & { [_ in Width.KEYS]: Uint8Array[] }
   & { [_ in Width.ENUM]: Word }
@@ -170,15 +168,15 @@ export class Byter<A extends readonly [Width, ...Width[]]> {
           break;
         }
         case Width.REAL:
-          b[z] = a.getFloat64(y) as number & { [BYTES]: 8 };
+          b[z] = a.getFloat64(y);
           break;
         case Width.TIME:
           b[z] = a.getUint32(y) + a.getUint16(y + 4) * 0x100000000 +
-            $[y + 6] * 0x1000000000000 as number & { [BYTES]: 7 };
+            $[y + 6] * 0x1000000000000;
           /* @__PURE__ */ assert(Math.abs(b[z] as number) <= 864e13);
           break;
         case Width.UINT:
-          b[z] = a.getUint32(y) as number & { [BYTES]: 4 };
+          b[z] = a.getUint32(y);
           break;
         case Width.BOOL:
           /* @__PURE__ */ assert($[y] === 0 || $[y] === 1);
