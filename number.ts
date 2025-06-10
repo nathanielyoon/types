@@ -34,6 +34,10 @@ export type Decoded = (
   & { [_ in Width.BITS]: Set<Word> }
   & { [_ in Width.TEXT]: string }
 ) extends infer A ? { [B in keyof A]: A[B] } : never; // make type look nicer
+/** Decoded data matching a schema. */
+export type Bytes<A> = A extends Byter<infer B>
+  ? { [C in keyof B]: Decoded[B[C]] }
+  : never;
 /** Fixed-length binary schema. */
 export class Byter<A extends readonly [Width, ...Width[]]> {
   private types;
@@ -64,7 +68,7 @@ export class Byter<A extends readonly [Width, ...Width[]]> {
     }
   }
   /** Converts typed fields to binary. */
-  encode($: { [B in keyof A]: Decoded[A[B]] }): Uint8Array {
+  encode($: Bytes<typeof this>): Uint8Array {
     const a = new Uint8Array(this.total), b = new DataView(a.buffer);
     for (let z = 0, y = 0, x, c; z < $.length; y += this.sizes[z++]) {
       switch (c = $[z], this.types[z]) {
@@ -132,7 +136,7 @@ export class Byter<A extends readonly [Width, ...Width[]]> {
     return a;
   }
   /** Converts binary to typed fields. */
-  decode($: Uint8Array): { [B in keyof A]: Decoded[A[B]] } {
+  decode($: Uint8Array): Bytes<typeof this> {
     /* @__PURE__ */ assert($.length === this.total);
     const a = new DataView($.buffer), b = Array(this.fields.length);
     for (let z = 0, y = 0, x; z < b.length; y += this.sizes[z++]) {
