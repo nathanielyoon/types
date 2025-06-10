@@ -4,7 +4,8 @@
   "version": "1.0.0",
   "exports": {
     "./number": "./number.ts",
-    "./string": "./string.ts"
+    "./string": "./string.ts",
+    "./wrap": "./wrap.ts"
   },
   "lint": {
     "rules": {
