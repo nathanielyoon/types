@@ -62,7 +62,8 @@ export class Byter<A extends readonly [Width, ...Width[]]> {
         this.types[z] = Width.KEYS, this.sizes[z] = ((a & 31) + 1 << 5) + 1;
       } else if (a & 32) {
         this.types[z] = Width.NUMS, this.sizes[z] = ((a & 31) + 1 << 3) + 1;
-      } else this.types[z] = this.sizes[z] = a;
+      } else if (!a) this.types[z] = 0, this.sizes[z] = 32;
+      else this.types[z] = this.sizes[z] = a;
     }
   }
   /** Converts typed fields to binary. */
