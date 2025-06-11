@@ -1,4 +1,5 @@
 import { b_s, s_b } from "@nyoon/base";
+import { assert } from "./assert.ts";
 
 /** Field types. */
 export const enum Width {
@@ -35,9 +36,6 @@ export type Decoded = (
 export type Bytes<A> = A extends Byter<infer B>
   ? { [C in keyof B]: Decoded[B[C]] }
   : never;
-function assert($: unknown): asserts $ {
-  if (!$) throw $;
-}
 /** Fixed-length binary schema. */
 export class Byter<A extends readonly [Width, ...Width[]]> {
   private types;
