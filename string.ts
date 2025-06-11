@@ -1,3 +1,6 @@
+/** Define schemas that decode data from variable-length CSV rows.
+ * @module */
+
 import { b_s64, s64_b } from "@nyoon/base";
 import { Row } from "jsr:@nyoon/csv@^1.0.9";
 import { flag } from "./flag.ts";

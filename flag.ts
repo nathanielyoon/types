@@ -1,3 +1,6 @@
+/** Wrap and unwrap error messages in `symbol`s.
+ * @module */
+
 type Err = string | (Err | null)[] | { [key: string]: Err };
 /** [ValidityState](https://dev.mozilla.org/Web/API/ValidityState) flags. */
 export const FLAGS = [

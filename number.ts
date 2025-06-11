@@ -1,3 +1,6 @@
+/** Define schemas that encode data to fixed-length binary strings.
+ * @module */
+
 import { b_s, s_b } from "@nyoon/base";
 
 /** Field types. */
