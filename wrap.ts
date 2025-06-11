@@ -1,21 +1,35 @@
-type Key<A extends string> = A | (Key<A> | null)[] | { [key: string]: Key<A> };
-const symbol = ($: Key<string>) => Symbol.for(JSON.stringify($));
-/** Wraps an error message or error messages in a `symbol`. */
-export const wrap = <A extends string>(
-  $: A | (symbol | null)[] | { [key: string]: symbol },
-): symbol => {
-  if (typeof $ === "string") return symbol($);
-  if (Array.isArray($)) {
-    const a = Array<Key<string> | null>($.length);
-    for (let z = 0; z < $.length; ++z) {
-      a[z] = JSON.stringify($[z] && open($[z]!) || null);
-    }
-    return symbol(a);
-  }
-  const a = Object.keys($), b: { [key: string]: Key<string> } = {};
-  for (let z = 0; z < a.length; ++z) if ($[a[z]]) b[a[z]] = open($[a[z]]);
-  return symbol(a);
-};
-/** Unwraps the error message or error messages held in a `symbol`. */
-export const open = <A extends string>($: symbol): Key<A> =>
+type Err = string | (Err | null)[] | { [key: string]: Err };
+export const FLAGS = [
+  "badInput",
+  "patternMismatch",
+  "rangeOverflow",
+  "rangeUnderflow",
+  "stepMismatch",
+  "tooLong",
+  "tooShort",
+  "typeMismatch",
+  "valid",
+  "valueMissing",
+] as const;
+const symbol = ($: Err) => Symbol.for(JSON.stringify($));
+/** Wraps an error or errors in a `symbol`. (Has some defined directly.) */
+export const wrap = Object.assign(
+  ($: string | (symbol | null)[] | { [key: string]: symbol }) =>
+    Symbol.for(JSON.stringify(
+      typeof $ === "string"
+        ? $
+        : Array.isArray($)
+        ? $.map(($) => JSON.stringify($ ? open($) : null))
+        : Object.keys($).reduce(
+          (err, key) => ($[key] ? { ...err, [key]: open($[key]) } : err),
+          {},
+        ),
+    )),
+  FLAGS.reduce(
+    ($, flag) => ({ ...$, [flag]: Symbol.for(flag) }),
+    {} as { [_ in typeof FLAGS[number]]: symbol },
+  ),
+);
+/** Unwraps the error or error held in a `symbol`. */
+export const open = <A extends Err>($: symbol): A =>
   JSON.parse(Symbol.keyFor($) ?? '""');
