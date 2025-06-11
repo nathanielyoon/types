@@ -19,7 +19,7 @@ export const enum Width {
 export type Word<A extends unknown[] = []> = A["length"] extends 32 ? A[number]
   : Word<[...A, A["length"]]>;
 /** Map of field widths to data types. */
-export type Decoded = (
+export type Data = (
   & { [_ in Width.PKEY]: Uint8Array }
   & { [_ in Width.BOOL]: boolean }
   & { [_ in Width.UINT]: number }
@@ -32,14 +32,14 @@ export type Decoded = (
   & { [_ in Width.TEXT]: string }
 ) extends infer A ? { [B in keyof A]: A[B] } : never; // make type look nicer
 /** Decoded data matching a schema. */
-export type Bytes<A> = A extends Byter<infer B>
-  ? { [C in keyof B]: Decoded[B[C]] }
+export type Struct<A> = A extends Schema<infer B>
+  ? { [C in keyof B]: Data[B[C]] }
   : never;
 function assert($: unknown, message?: string): asserts $ {
   if (!$) throw Error(message, { cause: $ });
 }
 /** Fixed-length binary schema. */
-export class Byter<A extends readonly [Width, ...Width[]]> {
+export class Schema<A extends readonly [Width, ...Width[]]> {
   private types;
   private sizes;
   /** Byte length of encoded data. */
@@ -69,7 +69,7 @@ export class Byter<A extends readonly [Width, ...Width[]]> {
     }
   }
   /** Converts typed fields to binary. */
-  encode($: Bytes<typeof this>): Uint8Array {
+  encode($: Struct<typeof this>): Uint8Array {
     const a = new Uint8Array(this.total), b = new DataView(a.buffer);
     for (let z = 0, y = 0, x, c; z < $.length; y += this.sizes[z++]) {
       switch (c = $[z], this.types[z]) {
@@ -137,7 +137,7 @@ export class Byter<A extends readonly [Width, ...Width[]]> {
     return a;
   }
   /** Converts binary to typed fields. */
-  decode($: Uint8Array): Bytes<typeof this> {
+  decode($: Uint8Array): Struct<typeof this> {
     /* @__PURE__ */ assert($.length === this.total);
     const a = new DataView($.buffer), b = Array(this.fields.length);
     for (let z = 0, y = 0, x; z < b.length; y += this.sizes[z++]) {

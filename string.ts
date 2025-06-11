@@ -9,6 +9,7 @@ type Data<A> = A extends readonly [string, ...string[]] ? A[number]
   : A extends [Type<infer B>] ? Data<B>[]
   : { [B in keyof A]: A[B] extends Type<infer C> ? Data<C> : never };
 type Type<A> = { parse: ($: Row) => A | symbol; stringify: ($: A) => Row };
+export type Infer<A> = A extends Type<infer B> ? B : never;
 const type = <A, B>(
   typer: (kind: A, meta: B) => [
     ($: string, row: Row) => Data<A> | symbol,
