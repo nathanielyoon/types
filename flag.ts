@@ -1,4 +1,5 @@
 type Err = string | (Err | null)[] | { [key: string]: Err };
+/** [ValidityState](https://dev.mozilla.org/Web/API/ValidityState) flags. */
 export const FLAGS = [
   "badInput",
   "patternMismatch",
@@ -12,7 +13,7 @@ export const FLAGS = [
   "valueMissing",
 ] as const;
 const symbol = ($: Err) => Symbol.for(JSON.stringify($));
-/** Wraps an error or errors in a `symbol`. (Has some defined directly.) */
+/** Wraps an error or errors in a `symbol`, has some defined directly. */
 export const flag = Object.assign(
   ($: string | (symbol | null)[] | { [key: string]: symbol }) =>
     Symbol.for(JSON.stringify(
