@@ -1,240 +1,178 @@
 import { b_s64, s64_b } from "@nyoon/base";
+import { Row } from "jsr:@nyoon/csv@^1.0.9";
 import { wrap } from "./wrap.ts";
 
 type MinMax = { min?: number; max?: number };
-type Types = { [key: string]: Type };
+type Enum = readonly [string, ...string[]];
+type Map = { [key: string]: Type };
 export type Type =
-  | { kind: "choice"; optional?: boolean; meta: readonly [string, ...string[]] }
-  | { kind: "number"; optional?: boolean; meta?: MinMax & { step?: number } }
-  | { kind: "string"; optional?: boolean; meta?: MinMax & { pattern?: string } }
-  | { kind: "binary"; optional?: boolean; meta?: MinMax & { step?: number } }
-  | { kind: [Type]; optional?: boolean; meta?: MinMax & { unique?: boolean } }
-  | { kind: Types; optional?: boolean; meta?: never };
+  | { kind: Enum; meta: { optional?: boolean } }
+  | { kind: "num"; meta?: MinMax & { step?: number; optional?: boolean } }
+  | { kind: "str"; meta?: MinMax & { pattern?: string; optional?: boolean } }
+  | { kind: "bin"; meta?: MinMax & { step?: number; optional?: boolean } }
+  | { kind: [Type]; meta?: MinMax & { unique?: boolean; optional?: boolean } }
+  | { kind: Map; meta?: MinMax & { optional?: boolean } };
 export type Data<A extends Type> =
-  | (A extends { optional: true } ? null : never)
-  | (A extends { kind: [infer B extends Type] } ? Data<B>[]
-    : A extends { kind: infer B extends { [key: string]: Type } }
-      ? { [C in keyof B]: Data<B[C]> }
-    : A extends { meta: infer B extends readonly string[] } ? B[number]
-    : A extends { kind: "number" } ? number
-    : A extends { kind: "string" } ? string
-    : A extends { kind: "binary" } ? Uint8Array
-    : never);
-interface ValidityStateFlags {
-  badInput: boolean;
-  customError: boolean;
-  patternMismatch: boolean;
-  rangeOverflow: boolean;
-  rangeUnderflow: boolean;
-  stepMismatch: boolean;
-  tooLong: boolean;
-  tooShort: boolean;
-  typeMismatch: boolean;
-  valid: boolean;
-  valueMissing: boolean;
-}
-type Flag = Exclude<keyof ValidityStateFlags, "customError">;
-abstract class Typer<A extends Type> {
-  protected null;
-  constructor(public type: A) {
-    this.null = type.optional ? null as Data<A> : wrap<Flag>("valueMissing");
-  }
-  abstract row_data(row: (string | null)[]): Data<A> | symbol;
-  abstract data_row(row: (string | null)[], $: Data<A>): void;
-}
-class Choice<A extends Extract<Type, { kind: "choice" }>> extends Typer<A> {
-  private has;
-  constructor(type: A) {
-    super(type);
-    this.has = Set.prototype.has.bind(new Set(type.meta));
-  }
-  row_data(row: (string | null)[]) {
-    const a = row.shift();
-    if (a == null) return this.null;
-    if (!this.has(a)) return wrap<Flag>("badInput");
-    return a as Data<A>;
-  }
-  data_row(row: (string | null)[], $: Data<A>) {
-    row.push($);
-  }
-}
-const clamp = ($: MinMax | undefined, min = 0, max = 65535) => {
-  const a = $?.min ?? min, b = $?.max ?? max;
-  return [Math.min(a, b), Math.max(a, b)];
+  | (A extends { meta: { optional: true } } ? null : never)
+  | (
+    A extends { kind: readonly [string, ...string[]] } ? A["kind"][number]
+      : A extends { kind: "num" } ? number
+      : A extends { kind: "str" } ? string
+      : A extends { kind: "bin" } ? Uint8Array
+      : A extends { kind: [infer B extends Type] } ? Data<B>[]
+      : A extends { kind: infer B extends Map } ? { [C in keyof B]: Data<B[C]> }
+      : never
+  );
+const clamp = ($: MinMax | undefined, max?: number) => {
+  const a = max == null ? 0 : -max, b = $?.min ?? a, c = $?.max ?? max ?? 65535;
+  return [Math.min(b, c), Math.max(b, c)];
 };
-class Number<A extends Extract<Type, { kind: "number" }>> extends Typer<A> {
-  private min;
-  private max;
-  private step;
-  constructor(type: A) {
-    super(type);
-    [this.min, this.max] = clamp(
-      type.meta,
-      -1.7976931348623157e+308,
-      1.7976931348623157e+308,
-    );
-    this.step = type.meta?.step ?? 0;
+export const normalize = ($: string) =>
+  $.normalize("NFC") // canonically decompose and compose
+    .replace(/\p{Cs}/gu, "\ufffd") // replace lone surrogates
+    .replace(/\p{Zl}|\p{Zp}/gu, "\n") // only use 0x0a
+    .replace(/\p{Zs}/gu, " "); // only use 0x20
+const type = <A extends Type>(
+  $: (flag: typeof wrap, kind: A["kind"], meta: A["meta"]) => [
+    row_data: ($: string, row: Row) => Data<A> | symbol,
+    data_row: ($: NonNullable<Data<A>>, row: Row) => string | null,
+  ],
+) =>
+<const B extends A>(kind: B["kind"], meta?: B["meta"]) => {
+  const a = meta?.optional ? null : wrap.valueMissing;
+  const [b, c] = $(wrap, kind, meta);
+  return {
+    parse: ($: Row) => {
+      const d = $.shift();
+      return (d == null ? a : b(d, $)) as Data<B> | symbol;
+    },
+    stringify: ($: Data<B>, row: Row) => {
+      if ($ == null) row.push($);
+      else row.splice(row.length, 0, c($, row));
+    },
+  };
+};
+export const opt = type<Extract<Type, { kind: Enum }>>((flag, kind) => {
+  const a = Set.prototype.has.bind(new Set(kind.map(normalize)));
+  return [($) => a($ = normalize($)) ? $ : flag("badInput"), normalize];
+});
+export const num = type<Extract<Type, { kind: "num" }>>((flag, _, meta) => {
+  const [a, b] = clamp(meta, Number.MAX_VALUE), c = meta?.step ?? 0;
+  return [
+    ($) => {
+      const d = +$;
+      if (!$.trim() || Number.isNaN(d)) return flag.badInput;
+      if (d < a) return flag.rangeUnderflow;
+      if (d > b) return flag.rangeOverflow;
+      if (d % c) return flag.stepMismatch;
+      return d;
+    },
+    String,
+  ];
+}).bind(null, "num");
+export const str = type<Extract<Type, { kind: "str" }>>((flag, _, meta) => {
+  const [a, b] = clamp(meta);
+  let c: RegExp["test"] | null;
+  try {
+    if (meta?.pattern) c = RegExp.prototype.test.bind(RegExp(meta.pattern));
+  } catch {
+    c = null;
   }
-  row_data(row: (string | null)[]) {
-    const a = row.shift();
-    if (a == null) return this.null;
-    if (!a.trim()) return wrap<Flag>("badInput");
-    const b = +a;
-    if (isNaN(b)) return wrap<Flag>("badInput");
-    if (b < this.min) return wrap<Flag>("rangeUnderflow");
-    if (b > this.max) return wrap<Flag>("rangeOverflow");
-    if (b % this.step) return wrap<Flag>("stepMismatch");
-    return b as Data<A>;
-  }
-  data_row(row: (string | null)[], $: Data<A>) {
-    row.push($ == null ? $ : `${$}`);
-  }
-}
-class String<A extends Extract<Type, { kind: "string" }>> extends Typer<A> {
-  private min;
-  private max;
-  private test;
-  constructor(type: A) {
-    super(type);
-    [this.min, this.max] = clamp(type.meta);
-    try {
-      if (type.meta?.pattern) {
-        this.test = RegExp.prototype.test.bind(RegExp(type.meta.pattern));
+  return [
+    ($) => {
+      $ = normalize($);
+      if ($.length < a) return flag.tooShort;
+      if ($.length > b) return flag.tooLong;
+      if (c?.($) === false) return flag.patternMismatch;
+      return $;
+    },
+    normalize,
+  ];
+}).bind(null, "str");
+export const bin = type<Extract<Type, { kind: "bin" }>>((flag, _, meta) => {
+  const [a, b] = clamp(meta), c = meta?.step ?? 0;
+  return [
+    ($) => {
+      if (/[^-\w]/.test($)) return flag.badInput;
+      const d = s64_b($);
+      if (d.length < a) return flag.tooShort;
+      if (d.length > b) return flag.tooLong;
+      if (d.length % c) return flag.stepMismatch;
+      return d;
+    },
+    b_s64,
+  ];
+}).bind(null, "bin");
+export const vec = type<Extract<Type, { kind: [Type] }>>((flag, kind, meta) => {
+  const [a, b] = clamp(meta), c = !meta?.unique, d = typer(kind, meta);
+  return [
+    ($, row) => {
+      const e = parseInt($, 36);
+      if (!$.trim() || Number.isNaN(e)) return flag.badInput;
+      if (e < a) return flag.tooShort;
+      if (e > b) return flag.tooLong;
+      const f = Array(e), g: (symbol | null)[] = [];
+      for (let z = 0; z < e; ++z) {
+        const h = f[z] = d.parse(row);
+        if (typeof h === "symbol") g[z] = h;
       }
-    } catch {
-      this.test = null;
-    }
-  }
-  row_data(row: (string | null)[]) {
-    const a = row.shift();
-    if (a == null) return this.null;
-    if (a !== normalize(a)) return wrap<Flag>("badInput");
-    if (a.length < this.min) return wrap<Flag>("tooShort");
-    if (a.length > this.max) return wrap<Flag>("tooLong");
-    if (this.test?.(a) === false) return wrap<Flag>("patternMismatch");
-    return a as Data<A>;
-  }
-  data_row(row: (string | null)[], $: Data<A>) {
-    row.push($);
-  }
-}
-class Binary<A extends Extract<Type, { kind: "binary" }>> extends Typer<A> {
-  private min;
-  private max;
-  private step;
-  constructor(type: A) {
-    super(type);
-    [this.min, this.max] = clamp(type.meta), this.step = type.meta?.step ?? 0;
-  }
-  row_data(row: (string | null)[]) {
-    const a = row.shift();
-    if (a == null) return this.null;
-    if (/[^-\w]/.test(a)) return wrap<Flag>("badInput");
-    const b = s64_b(a);
-    if (b.length < this.min) return wrap<Flag>("tooShort");
-    if (b.length > this.max) return wrap<Flag>("tooLong");
-    if (b.length % this.step) return wrap<Flag>("stepMismatch");
-    return b as Data<A>;
-  }
-  data_row(row: (string | null)[], $: NonNullable<Data<A>>) {
-    row.push(b_s64($));
-  }
-}
-class Vector<A extends Extract<Type, { kind: [Type] }>> extends Typer<A> {
-  private min;
-  private max;
-  private unique;
-  private typer;
-  constructor(type: A) {
-    super(type);
-    [this.min, this.max] = clamp(type.meta), this.unique = type.meta?.unique;
-    this.typer = typer<Type>(type.kind[0]);
-  }
-  row_data(row: (string | null)[]) {
-    const a = row.shift();
-    if (a == null) return this.null;
-    if (!a.trim()) return wrap<Flag>("badInput");
-    const b = parseInt(a, 36);
-    if (isNaN(b)) return wrap<Flag>("badInput");
-    if (b < this.min) return wrap<Flag>("tooShort");
-    if (b > this.max) return wrap<Flag>("tooLong");
-    const c = Array(b), d: (symbol | null)[] = [];
-    for (let z = 0; z < b; ++z) {
-      const e = c[z] = this.typer.row_data(row);
-      if (typeof e === "symbol") d[z] = e;
-    }
-    if (d.length) {
-      for (let z = 0; z < b; ++z) d[z] ??= null;
-      return wrap(d);
-    }
-    if (this.unique) {
-      for (let z = 0, d = new Set<string>(); z < b; ++z) {
-        if (d.size === d.add(JSON.stringify(c[z])).size) {
-          return wrap<Flag>("typeMismatch");
+      if (g.length) {
+        for (let z = 0; z < e; ++z) g[z] ??= null;
+        return flag(g);
+      }
+      if (c) return f;
+      for (let z = 0, h = new Set<string>(); z < e; ++z) {
+        if (h.size === h.add(JSON.stringify(f[z])).size) {
+          return flag.typeMismatch;
         }
       }
-    }
-    return c as Data<A>;
+      return f;
+    },
+    ($, row) => {
+      for (let z = 0; z < $.length; ++z) d.stringify($[z], row);
+      return $.length.toString(36);
+    },
+  ];
+});
+export const obj = type<Extract<Type, { kind: Map }>>((flag, kind, meta) => {
+  const [a, b] = clamp(meta), c = Object.keys(kind);
+  const d = Array.from(c, ($) => typer(kind[$].kind, kind[$].meta));
+  return [
+    ($, row) => {
+      const e = parseInt($, 36);
+      if (!$.trim() || Number.isNaN(e)) return flag.badInput;
+      if (e !== c.length) return flag.typeMismatch;
+      const f: { [key: string]: any } = {}, g: { [key: string]: symbol } = {};
+      let h = 0;
+      for (let z = 0; z < e; ++z) {
+        const i = f[c[z]] = d[z].parse(row);
+        if (typeof i === "symbol") g[c[z]] = i;
+        else if (i !== null && ++h > b) return flag.tooLong;
+      }
+      if (h < a) return flag.tooShort;
+      if (Object.keys(g).length) return wrap(g);
+      return f;
+    },
+    ($, row) => {
+      for (let z = 0; z < c.length; ++z) d[z].stringify($[c[z]], row);
+      return c.length.toString(36);
+    },
+  ];
+});
+const typer = <A extends Type>(kind: A["kind"], meta: A["meta"]) => {
+  if ((Array.isArray as ($: any) => $ is readonly any[])(kind)) {
+    return typeof kind[0] === "string"
+      ? opt(kind as Enum, meta)
+      : vec(kind as [Type], meta);
   }
-  data_row(row: (string | null)[], $: Data<A>) {
-    if ($ == null) return row.push(null);
-    row.push($.length.toString(36));
-    for (let z = 0; z < $.length; ++z) this.typer.data_row(row, $[z]);
+  if (typeof kind === "object") return obj(kind, meta);
+  switch (kind) {
+    case "num":
+      return num(meta);
+    case "str":
+      return str(meta);
+    case "bin":
+      return bin(meta);
   }
-}
-class Record<A extends Extract<Type, { kind: Types }>> extends Typer<A> {
-  private keys;
-  private typers;
-  length;
-  constructor(type: A) {
-    super(type);
-    this.keys = Object.keys(type.kind), this.length = this.keys.length;
-    this.typers = Array<Typer<Type>>(this.length);
-    for (let z = 0; z < this.length; ++z) {
-      this.typers[z] = typer(type.kind[this.keys[z]]);
-    }
-  }
-  row_data(row: (string | null)[]) {
-    const a = row.shift();
-    if (a == null) return this.null;
-    if (!a.trim()) return wrap<Flag>("badInput");
-    const b = parseInt(a, 36);
-    if (isNaN(b)) return wrap<Flag>("badInput");
-    if (b !== this.length) return wrap<Flag>("typeMismatch");
-    const c: { [key: string]: unknown } = {}, d: (symbol | null)[] = [];
-    for (let z = 0; z < this.length; ++z) {
-      const e = c[this.keys[z]] = this.typers[z].row_data(row);
-      if (typeof e === "symbol") d[z] = e;
-    }
-    if (d.length) {
-      for (let z = 0; z < b; ++z) d[z] ??= null;
-      return wrap(d);
-    }
-    return c as Data<A>;
-  }
-  data_row(row: (string | null)[], $: Data<A>) {
-    if ($ == null) return row.push(null);
-    row.push(this.length.toString(36));
-    for (let z = 0; z < this.length; ++z) {
-      this.typers[z].data_row(row, $[this.keys[z]]);
-    }
-  }
-}
-const vec = ($: Type): $ is Extract<Type, { kind: [Type] }> =>
-  Array.isArray($.kind);
-const rec = ($: Type): $ is Extract<Type, { kind: Types }> =>
-  typeof $.kind === "object";
-export const typer = <A extends Type>(type: A): Typer<A> => {
-  if (vec(type)) return new Vector(type);
-  if (rec(type)) return new Record(type);
-  switch (type.kind) { // TODO figure out this type
-    case "choice":
-      return new Choice(type) as unknown as Typer<A>;
-    case "number":
-      return new Number(type) as unknown as Typer<A>;
-    case "string":
-      return new String(type) as unknown as Typer<A>;
-    case "binary":
-      return new Binary(type) as unknown as Typer<A>;
-  }
+  throw "UNREACHABLE";
 };
