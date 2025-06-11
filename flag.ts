@@ -13,7 +13,7 @@ export const FLAGS = [
 ] as const;
 const symbol = ($: Err) => Symbol.for(JSON.stringify($));
 /** Wraps an error or errors in a `symbol`. (Has some defined directly.) */
-export const wrap = Object.assign(
+export const flag = Object.assign(
   ($: string | (symbol | null)[] | { [key: string]: symbol }) =>
     Symbol.for(JSON.stringify(
       typeof $ === "string"
@@ -21,7 +21,7 @@ export const wrap = Object.assign(
         : Array.isArray($)
         ? $.map(($) => JSON.stringify($ ? open($) : null))
         : Object.keys($).reduce(
-          (err, key) => ($[key] ? { ...err, [key]: open($[key]) } : err),
+          (all, key) => ($[key] ? { ...all, [key]: open($[key]) } : all),
           {},
         ),
     )),
