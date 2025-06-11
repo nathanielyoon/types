@@ -17,6 +17,7 @@
     "test": "deno test --allow-all --no-check --parallel --doc"
   },
   "imports": {
+    "@nyoon/base": "jsr:@nyoon/base@^2.1.1",
     "@std/assert": "jsr:@std/assert@^1.0.13"
   }
 }

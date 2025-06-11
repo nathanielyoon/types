@@ -1,4 +1,4 @@
-import { b_s64, normalize, s64_b } from "./encoding.ts";
+import { b_s64, s64_b } from "@nyoon/base";
 import { wrap } from "./wrap.ts";
 
 type MinMax = { min?: number; max?: number };
@@ -20,6 +20,19 @@ export type Data<A extends Type> =
     : A extends { kind: "string" } ? string
     : A extends { kind: "binary" } ? Uint8Array
     : never);
+interface ValidityStateFlags {
+  badInput: boolean;
+  customError: boolean;
+  patternMismatch: boolean;
+  rangeOverflow: boolean;
+  rangeUnderflow: boolean;
+  stepMismatch: boolean;
+  tooLong: boolean;
+  tooShort: boolean;
+  typeMismatch: boolean;
+  valid: boolean;
+  valueMissing: boolean;
+}
 type Flag = Exclude<keyof ValidityStateFlags, "customError">;
 abstract class Typer<A extends Type> {
   protected null;

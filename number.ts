@@ -1,3 +1,5 @@
+import { b_s, s_b } from "@nyoon/base";
+
 /** Field types. */
 export const enum Width {
   // Variable-length fields - trailing zero bits hold element length.
@@ -73,7 +75,7 @@ export class Byter<A extends readonly [Width, ...Width[]]> {
       switch (c = $[z], this.types[z]) {
         case Width.TEXT: {
           /* @__PURE__ */ assert(typeof c === "string");
-          const d = new TextEncoder().encode(c);
+          const d = s_b(c);
           // The value in `this.sizes` includes a byte for the string's length,
           // which must thus be lower to leave room.
           /* @__PURE__ */ assert(d.length < this.sizes[z]);
@@ -141,7 +143,7 @@ export class Byter<A extends readonly [Width, ...Width[]]> {
     for (let z = 0, y = 0, x; z < b.length; y += this.sizes[z++]) {
       switch (this.types[z]) {
         case Width.TEXT:
-          b[z] = new TextDecoder().decode($.subarray(y + 1, y + 1 + $[y]));
+          b[z] = b_s($.subarray(y + 1, y + 1 + $[y]));
           break;
         case Width.BITS: {
           const d = b[z] = new Set<Word>();

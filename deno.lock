@@ -1,10 +1,14 @@
 {
   "version": "5",
   "specifiers": {
+    "jsr:@nyoon/base@^2.1.1": "2.1.1",
     "jsr:@std/assert@^1.0.13": "1.0.13",
     "jsr:@std/internal@^1.0.6": "1.0.8"
   },
   "jsr": {
+    "@nyoon/base@2.1.1": {
+      "integrity": "4294f837349b76cb8ffb8e8a2f91de19565324cb2dd8f0e421f44cddf7e71168"
+    },
     "@std/assert@1.0.13": {
       "integrity": "ae0d31e41919b12c656c742b22522c32fb26ed0cba32975cb0de2a273cb68b29",
       "dependencies": [
@@ -17,6 +21,7 @@
   },
   "workspace": {
     "dependencies": [
+      "jsr:@nyoon/base@^2.1.1",
       "jsr:@std/assert@^1.0.13"
     ]
   }
