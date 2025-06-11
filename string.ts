@@ -1,119 +1,110 @@
 import { b_s64, s64_b } from "@nyoon/base";
 import { Row } from "jsr:@nyoon/csv@^1.0.9";
-import { wrap } from "./wrap.ts";
+import { flag } from "./flag.ts";
 
-type MinMax = { min?: number; max?: number };
-type Enum = readonly [string, ...string[]];
-type Map = { [key: string]: Type };
-export type Type =
-  | { kind: Enum; meta: { optional?: boolean } }
-  | { kind: "num"; meta?: MinMax & { step?: number; optional?: boolean } }
-  | { kind: "str"; meta?: MinMax & { pattern?: string; optional?: boolean } }
-  | { kind: "bin"; meta?: MinMax & { step?: number; optional?: boolean } }
-  | { kind: [Type]; meta?: MinMax & { unique?: boolean; optional?: boolean } }
-  | { kind: Map; meta?: MinMax & { optional?: boolean } };
-export type Data<A extends Type> =
-  | (A extends { meta: { optional: true } } ? null : never)
-  | (
-    A extends { kind: readonly [string, ...string[]] } ? A["kind"][number]
-      : A extends { kind: "num" } ? number
-      : A extends { kind: "str" } ? string
-      : A extends { kind: "bin" } ? Uint8Array
-      : A extends { kind: [infer B extends Type] } ? Data<B>[]
-      : A extends { kind: infer B extends Map } ? { [C in keyof B]: Data<B[C]> }
-      : never
-  );
-const clamp = ($: MinMax | undefined, max?: number) => {
-  const a = max == null ? 0 : -max, b = $?.min ?? a, c = $?.max ?? max ?? 65535;
-  return [Math.min(b, c), Math.max(b, c)];
-};
-export const normalize = ($: string) =>
-  $.normalize("NFC") // canonically decompose and compose
-    .replace(/\p{Cs}/gu, "\ufffd") // replace lone surrogates
-    .replace(/\p{Zl}|\p{Zp}/gu, "\n") // only use 0x0a
-    .replace(/\p{Zs}/gu, " "); // only use 0x20
-const type = <A extends Type>(
-  $: (flag: typeof wrap, kind: A["kind"], meta: A["meta"]) => [
-    row_data: ($: string, row: Row) => Data<A> | symbol,
-    data_row: ($: NonNullable<Data<A>>, row: Row) => string | null,
+type Data<A> = A extends readonly [string, ...string[]] ? A[number]
+  : A extends "uint" | "time" | "real" ? number
+  : A extends "char" | "text" ? string
+  : A extends "pkey" | "blob" ? Uint8Array
+  : A extends [Type<infer B>] ? Data<B>[]
+  : { [B in keyof A]: A[B] extends Type<infer C> ? Data<C> : never };
+type Type<A> = { parse: ($: Row) => A | symbol; stringify: ($: A) => Row };
+const type = <A, B>(
+  typer: (kind: A, meta: B) => [
+    ($: string, row: Row) => Data<A> | symbol,
+    ($: NonNullable<Data<A>>, row: Row) => string,
   ],
 ) =>
-<const B extends A>(kind: B["kind"], meta?: B["meta"]) => {
-  const a = meta?.optional ? null : wrap.valueMissing;
-  const [b, c] = $(wrap, kind, meta);
+<const C extends A, const D extends boolean = never>(
+  kind: C,
+  meta?: B & { optional?: D },
+): Type<Data<C> | (D extends true ? null : never)> => {
+  const a = meta?.optional ? null : flag.valueMissing;
+  const [b, c] = typer(kind, meta! ?? {});
   return {
-    parse: ($: Row) => {
+    parse: ($) => {
       const d = $.shift();
-      return (d == null ? a : b(d, $)) as Data<B> | symbol;
+      return d == null ? a : b(d, $) as any;
     },
-    stringify: ($: Data<B>, row: Row) => {
-      if ($ == null) row.push($);
-      else row.splice(row.length, 0, c($, row));
+    stringify: ($) => {
+      if ($ == null) return [$];
+      const a: Row = [];
+      return a.unshift(c($, a)), a;
     },
   };
 };
-export const opt = type<Extract<Type, { kind: Enum }>>((flag, kind) => {
-  const a = Set.prototype.has.bind(new Set(kind.map(normalize)));
-  return [($) => a($ = normalize($)) ? $ : flag("badInput"), normalize];
+const normalize = ($: string) =>
+  $.normalize("NFC").replace(/\p{Cs}/gu, "\ufffd")
+    .replace(/\r\n|\p{Zl}|\p{Zp}/gu, "\n").replace(/\p{Zs}/gu, " ");
+export const opt = type<readonly [string, ...string[]], {}>((kind) => {
+  const a = Set.prototype.has.bind(kind);
+  return [($) => a($) ? $ : flag.badInput, normalize];
 });
-export const num = type<Extract<Type, { kind: "num" }>>((flag, _, meta) => {
-  const [a, b] = clamp(meta, Number.MAX_VALUE), c = meta?.step ?? 0;
-  return [
-    ($) => {
-      const d = +$;
-      if (!$.trim() || Number.isNaN(d)) return flag.badInput;
-      if (d < a) return flag.rangeUnderflow;
-      if (d > b) return flag.rangeOverflow;
-      if (d % c) return flag.stepMismatch;
-      return d;
-    },
-    String,
-  ];
-}).bind(null, "num");
-export const str = type<Extract<Type, { kind: "str" }>>((flag, _, meta) => {
-  const [a, b] = clamp(meta);
-  let c: RegExp["test"] | null;
-  try {
-    if (meta?.pattern) c = RegExp.prototype.test.bind(RegExp(meta.pattern));
-  } catch {
-    c = null;
-  }
-  return [
-    ($) => {
+type MinMax = { min?: number; max?: number };
+const clamp = ($: MinMax, range: readonly [min: number, max: number]) => {
+  const a = $.min ?? range[0], b = $.max ?? range[1];
+  return [Math.min(a, b), Math.max(a, b)];
+};
+const MIN_MAX = {
+  uint: [0, -1 >>> 0],
+  time: [-864e13, 864e13],
+  real: [-Number.MAX_VALUE, Number.MAX_VALUE],
+  char: [0, 0xff],
+  text: [0, 0xffff],
+  pkey: [32, 32],
+  blob: [0, 0xffff],
+} as const;
+export const num = type<"uint" | "time" | "real", MinMax & { step?: number }>(
+  (kind, meta) => {
+    const [a, b] = clamp(meta, MIN_MAX[kind]), c = meta?.step ?? 0;
+    const d = kind.includes("i") ? Number.isInteger : Number.isFinite;
+    return [($) => {
+      if (!$.trim()) return flag.badInput;
+      const e = +$;
+      if (!d(e)) return flag.typeMismatch;
+      if (e < a) return flag.rangeUnderflow;
+      if (e > b) return flag.rangeOverflow;
+      if (e % c) return flag.stepMismatch;
+      return e;
+    }, String];
+  },
+);
+export const str = type<"char" | "text", MinMax & { pattern?: RegExp }>(
+  (kind, meta) => {
+    const [a, b] = clamp(meta, MIN_MAX[kind]), c = meta?.pattern;
+    return [($) => {
       $ = normalize($);
       if ($.length < a) return flag.tooShort;
       if ($.length > b) return flag.tooLong;
-      if (c?.($) === false) return flag.patternMismatch;
+      if (c?.test($) === false) return flag.patternMismatch;
       return $;
-    },
-    normalize,
-  ];
-}).bind(null, "str");
-export const bin = type<Extract<Type, { kind: "bin" }>>((flag, _, meta) => {
-  const [a, b] = clamp(meta), c = meta?.step ?? 0;
-  return [
-    ($) => {
+    }, normalize];
+  },
+);
+export const bin = type<"pkey" | "blob", MinMax & { step?: number }>(
+  (kind, meta) => {
+    const [a, b] = clamp(meta, MIN_MAX[kind]), c = meta?.step ?? 0;
+    return [($) => {
       if (/[^-\w]/.test($)) return flag.badInput;
       const d = s64_b($);
       if (d.length < a) return flag.tooShort;
       if (d.length > b) return flag.tooLong;
       if (d.length % c) return flag.stepMismatch;
       return d;
-    },
-    b_s64,
-  ];
-}).bind(null, "bin");
-export const vec = type<Extract<Type, { kind: [Type] }>>((flag, kind, meta) => {
-  const [a, b] = clamp(meta), c = !meta?.unique, d = typer(kind, meta);
-  return [
-    ($, row) => {
+    }, b_s64];
+  },
+);
+export const vec = type<[Type<any>], MinMax & { unique?: boolean }>(
+  ([{ parse, stringify }], meta) => {
+    const [a, b] = clamp(meta, [0, 0xfff]), c = !meta.unique;
+    return [($, row) => {
       const e = parseInt($, 36);
-      if (!$.trim() || Number.isNaN(e)) return flag.badInput;
+      if (!$.trim() || Number.isInteger(e)) return flag.badInput;
       if (e < a) return flag.tooShort;
       if (e > b) return flag.tooLong;
       const f = Array(e), g: (symbol | null)[] = [];
       for (let z = 0; z < e; ++z) {
-        const h = f[z] = d.parse(row);
+        const h = f[z] = parse(row);
         if (typeof h === "symbol") g[z] = h;
       }
       if (g.length) {
@@ -127,52 +118,32 @@ export const vec = type<Extract<Type, { kind: [Type] }>>((flag, kind, meta) => {
         }
       }
       return f;
-    },
-    ($, row) => {
-      for (let z = 0; z < $.length; ++z) d.stringify($[z], row);
+    }, ($, row) => {
+      for (let z = 0; z < $.length; ++z) row.push.apply(row, stringify($[z]));
       return $.length.toString(36);
-    },
-  ];
+    }];
+  },
+);
+export const obj = type<{ [key: string]: Type<any> }, MinMax>((kind, meta) => {
+  const [a, b] = clamp(meta, [0, 0x3ff]), c = Object.keys(kind);
+  return [($, row) => {
+    const e = parseInt($, 36);
+    if (!$.trim() || Number.isInteger(e)) return flag.badInput;
+    if (e !== c.length) return flag.typeMismatch;
+    const f: { [key: string]: any } = {}, g: { [key: string]: symbol } = {};
+    let h = 0;
+    for (let z = 0; z < e; ++z) {
+      const i = f[c[z]] = kind[c[z]].parse(row);
+      if (typeof i === "symbol") g[c[z]] = i;
+      else if (i !== null && ++h > b) return flag.tooLong;
+    }
+    if (h < a) return flag.tooShort;
+    if (Object.keys(g).length) return flag(g);
+    return f;
+  }, ($, row) => {
+    for (let z = 0; z < c.length; ++z) {
+      row.push.apply(kind[c[z]].stringify($[c[z]]));
+    }
+    return c.length.toString(36);
+  }];
 });
-export const obj = type<Extract<Type, { kind: Map }>>((flag, kind, meta) => {
-  const [a, b] = clamp(meta), c = Object.keys(kind);
-  const d = Array.from(c, ($) => typer(kind[$].kind, kind[$].meta));
-  return [
-    ($, row) => {
-      const e = parseInt($, 36);
-      if (!$.trim() || Number.isNaN(e)) return flag.badInput;
-      if (e !== c.length) return flag.typeMismatch;
-      const f: { [key: string]: any } = {}, g: { [key: string]: symbol } = {};
-      let h = 0;
-      for (let z = 0; z < e; ++z) {
-        const i = f[c[z]] = d[z].parse(row);
-        if (typeof i === "symbol") g[c[z]] = i;
-        else if (i !== null && ++h > b) return flag.tooLong;
-      }
-      if (h < a) return flag.tooShort;
-      if (Object.keys(g).length) return wrap(g);
-      return f;
-    },
-    ($, row) => {
-      for (let z = 0; z < c.length; ++z) d[z].stringify($[c[z]], row);
-      return c.length.toString(36);
-    },
-  ];
-});
-const typer = <A extends Type>(kind: A["kind"], meta: A["meta"]) => {
-  if ((Array.isArray as ($: any) => $ is readonly any[])(kind)) {
-    return typeof kind[0] === "string"
-      ? opt(kind as Enum, meta)
-      : vec(kind as [Type], meta);
-  }
-  if (typeof kind === "object") return obj(kind, meta);
-  switch (kind) {
-    case "num":
-      return num(meta);
-    case "str":
-      return str(meta);
-    case "bin":
-      return bin(meta);
-  }
-  throw "UNREACHABLE";
-};
