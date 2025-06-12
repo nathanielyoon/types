@@ -30,7 +30,7 @@ export const flag = Object.assign(
         ),
     )),
   FLAGS.reduce(
-    ($, flag) => ({ ...$, [flag]: Symbol.for(flag) }),
+    ($, flag) => ({ ...$, [flag]: symbol(flag) }),
     {} as { [_ in typeof FLAGS[number]]: symbol },
   ),
 );
