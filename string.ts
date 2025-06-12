@@ -65,6 +65,7 @@ export const num = type<"uint" | "time" | "real", MinMax & { step?: number }>(
     return [($) => {
       if (!$.trim()) return flag.badInput;
       const e = +$;
+      if (Number.isNaN(e)) return flag.badInput;
       if (!d(e)) return flag.typeMismatch;
       if (e < a) return flag.rangeUnderflow;
       if (e > b) return flag.rangeOverflow;
