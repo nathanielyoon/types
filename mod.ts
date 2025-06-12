@@ -28,21 +28,26 @@ export const flag = Object.assign(
           {},
         ),
     )),
-  FLAGS.reduce(
-    ($, flag) => ({ ...$, [flag]: Symbol.for(JSON.stringify(flag)) }),
-    {} as { [_ in typeof FLAGS[number]]: symbol },
-  ),
-);
+  FLAGS.reduce((to, $) => ({ ...to, [$]: Symbol.for(JSON.stringify($)) }), {}),
+) as
+  & (($: string | (symbol | null)[] | { [key: string]: symbol }) => symbol)
+  & { [_ in typeof FLAGS[number]]: symbol };
 /** Unwraps the error or error held in a `symbol`. */
 export const open = <A extends Err>($: symbol): A =>
   JSON.parse(Symbol.keyFor($) ?? '""');
+type Numeric = "uint" | "time" | "real";
+type Stringy = "char" | "text";
+type Byteish = "pkey" | "blob";
 type Data<A> = A extends readonly [string, ...string[]] ? A[number]
-  : A extends "uint" | "time" | "real" ? number
-  : A extends "char" | "text" ? string
-  : A extends "pkey" | "blob" ? Uint8Array
+  : A extends Numeric ? number
+  : A extends Stringy ? string
+  : A extends Byteish ? Uint8Array
   : A extends Type<infer B> ? B[]
   : { [B in keyof A]: A[B] extends Type<infer C> ? C : never };
-type Type<A> = { parse: ($: Row) => A | symbol; stringify: ($: A) => Row };
+type Type<A = any> = {
+  parse: ($: Row) => A | symbol;
+  stringify: ($: A) => Row;
+};
 export type Infer<A> = A extends Type<infer B> ? B : never;
 const type = <A, B>(
   typer: (kind: A, meta: B) => [
@@ -63,20 +68,23 @@ const type = <A, B>(
     },
     stringify: ($) => {
       if ($ == null) return [$];
-      const a: Row = [];
-      return a.unshift(c($, a)), a;
+      const d: Row = [];
+      return d.unshift(c($, d)), d;
     },
   };
 };
 const normalize = ($: string) =>
   $.normalize("NFC").replace(/\p{Cs}/gu, "\ufffd")
     .replace(/\r\n|\p{Zl}|\p{Zp}/gu, "\n").replace(/\p{Zs}/gu, " ");
-export const opt = type<readonly [string, ...string[]], {}>((kind) => {
-  const a = Set.prototype.has.bind(new Set(kind));
-  return [($) => a($) ? $ : flag.badInput, normalize];
-});
-type MinMax = { min?: number; max?: number };
-const clamp = ($: MinMax, range: readonly [min: number, max: number]) => {
+export const opt: ReturnType<typeof type<readonly [string, ...string[]], {}>> =
+  type<readonly [string, ...string[]], {}>((kind) => {
+    const a = Set.prototype.has.bind(new Set(kind));
+    return [($) => a($) ? $ : flag.badInput, normalize];
+  });
+type Meta<A> = {
+  [B in keyof A | "min" | "max"]?: B extends keyof A ? A[B] : number;
+};
+const clamp = ($: Meta<any>, range: readonly [min: number, max: number]) => {
   const a = $.min ?? range[0], b = $.max ?? range[1];
   return [Math.min(a, b), Math.max(a, b)];
 };
@@ -89,8 +97,8 @@ const MIN_MAX = {
   pkey: [32, 32],
   blob: [0, 0xffff],
 } as const;
-export const num = type<"uint" | "time" | "real", MinMax & { step?: number }>(
-  (kind, meta) => {
+export const num: ReturnType<typeof type<Numeric, Meta<{ step: number }>>> =
+  type<Numeric, Meta<{ step: number }>>((kind, meta) => {
     const [a, b] = clamp(meta, MIN_MAX[kind]), c = meta?.step ?? 0;
     const d = kind.includes("i") ? Number.isInteger : Number.isFinite;
     return [($) => {
@@ -103,10 +111,9 @@ export const num = type<"uint" | "time" | "real", MinMax & { step?: number }>(
       if (e % c) return flag.stepMismatch;
       return e;
     }, String];
-  },
-);
-export const str = type<"char" | "text", MinMax & { pattern?: RegExp }>(
-  (kind, meta) => {
+  });
+export const str: ReturnType<typeof type<Stringy, Meta<{ pattern: RegExp }>>> =
+  type<Stringy, Meta<{ pattern: RegExp }>>((kind, meta) => {
     const [a, b] = clamp(meta, MIN_MAX[kind]), c = meta?.pattern;
     return [($) => {
       $ = normalize($);
@@ -115,10 +122,9 @@ export const str = type<"char" | "text", MinMax & { pattern?: RegExp }>(
       if (c?.test($) === false) return flag.patternMismatch;
       return $;
     }, normalize];
-  },
-);
-export const bin = type<"pkey" | "blob", MinMax & { step?: number }>(
-  (kind, meta) => {
+  });
+export const bin: ReturnType<typeof type<Byteish, Meta<{ step: number }>>> =
+  type<Byteish, Meta<{ step: number }>>((kind, meta) => {
     const [a, b] = clamp(meta, MIN_MAX[kind]), c = meta?.step ?? 0;
     return [($) => {
       if (/[^-\w]/.test($)) return flag.badInput;
@@ -128,10 +134,9 @@ export const bin = type<"pkey" | "blob", MinMax & { step?: number }>(
       if (d.length % c) return flag.stepMismatch;
       return d;
     }, b_s64];
-  },
-);
-export const vec = type<Type<any>, MinMax & { unique?: boolean }>(
-  ({ parse, stringify }, meta) => {
+  });
+export const vec: ReturnType<typeof type<Type, Meta<{ unique: boolean }>>> =
+  type<Type, Meta<{ unique: boolean }>>(({ parse, stringify }, meta) => {
     const [a, b] = clamp(meta, [0, 0xfff]), c = !meta.unique;
     return [($, row) => {
       const e = parseInt($, 36);
@@ -158,28 +163,28 @@ export const vec = type<Type<any>, MinMax & { unique?: boolean }>(
       for (let z = 0; z < $.length; ++z) row.push.apply(row, stringify($[z]));
       return $.length.toString(36);
     }];
-  },
-);
-export const obj = type<{ [key: string]: Type<any> }, MinMax>((kind, meta) => {
-  const [a, b] = clamp(meta, [0, 0x3ff]), c = Object.keys(kind);
-  return [($, row) => {
-    const e = parseInt($, 36);
-    if (!$.trim() || !Number.isInteger(e)) return flag.badInput;
-    if (e !== c.length) return flag.typeMismatch;
-    const f: { [key: string]: any } = {}, g: { [key: string]: symbol } = {};
-    let h = 0;
-    for (let z = 0; z < e; ++z) {
-      const i = f[c[z]] = kind[c[z]].parse(row);
-      if (typeof i === "symbol") g[c[z]] = i;
-      else if (i !== null && ++h > b) return flag.tooLong;
-    }
-    if (h < a) return flag.tooShort;
-    if (Object.keys(g).length) return flag(g);
-    return f;
-  }, ($, row) => {
-    for (let z = 0; z < c.length; ++z) {
-      row.push.apply(row, kind[c[z]].stringify($[c[z]]));
-    }
-    return c.length.toString(36);
-  }];
-});
+  });
+export const obj: ReturnType<typeof type<{ [key: string]: Type }, Meta<{}>>> =
+  type<{ [key: string]: Type }, Meta<{}>>((kind, meta) => {
+    const [a, b] = clamp(meta, [0, 0x3ff]), c = Object.keys(kind);
+    return [($, row) => {
+      const e = parseInt($, 36);
+      if (!$.trim() || !Number.isInteger(e)) return flag.badInput;
+      if (e !== c.length) return flag.typeMismatch;
+      const f: { [key: string]: any } = {}, g: { [key: string]: symbol } = {};
+      let h = 0;
+      for (let z = 0; z < e; ++z) {
+        const i = f[c[z]] = kind[c[z]].parse(row);
+        if (typeof i === "symbol") g[c[z]] = i;
+        else if (i !== null && ++h > b) return flag.tooLong;
+      }
+      if (h < a) return flag.tooShort;
+      if (Object.keys(g).length) return flag(g);
+      return f;
+    }, ($, row) => {
+      for (let z = 0; z < c.length; ++z) {
+        row.push.apply(row, kind[c[z]].stringify($[c[z]]));
+      }
+      return c.length.toString(36);
+    }];
+  });
