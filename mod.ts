@@ -1,10 +1,42 @@
-/** Define schemas that decode data from variable-length CSV rows.
- * @module */
-
 import { b_s64, s64_b } from "@nyoon/base";
 import { Row } from "jsr:@nyoon/csv@^1.0.9";
-import { flag } from "./flag.ts";
 
+type Err = string | (Err | null)[] | { [key: string]: Err };
+/** [ValidityState](https://dev.mozilla.org/Web/API/ValidityState) flags. */
+export const FLAGS = [
+  "badInput",
+  "patternMismatch",
+  "rangeOverflow",
+  "rangeUnderflow",
+  "stepMismatch",
+  "tooLong",
+  "tooShort",
+  "typeMismatch",
+  "valid",
+  "valueMissing",
+] as const;
+const symbol = ($: Err) => Symbol.for(JSON.stringify($));
+/** Wraps an error or errors in a `symbol`, has some defined directly. */
+export const flag = Object.assign(
+  ($: string | (symbol | null)[] | { [key: string]: symbol }) =>
+    Symbol.for(JSON.stringify(
+      typeof $ === "string"
+        ? $
+        : Array.isArray($)
+        ? $.map(($) => JSON.stringify($ ? open($) : null))
+        : Object.keys($).reduce(
+          (all, key) => ($[key] ? { ...all, [key]: open($[key]) } : all),
+          {},
+        ),
+    )),
+  FLAGS.reduce(
+    ($, flag) => ({ ...$, [flag]: symbol(flag) }),
+    {} as { [_ in typeof FLAGS[number]]: symbol },
+  ),
+);
+/** Unwraps the error or error held in a `symbol`. */
+export const open = <A extends Err>($: symbol): A =>
+  JSON.parse(Symbol.keyFor($) ?? '""');
 type Data<A> = A extends readonly [string, ...string[]] ? A[number]
   : A extends "uint" | "time" | "real" ? number
   : A extends "char" | "text" ? string
