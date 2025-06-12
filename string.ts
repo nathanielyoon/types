@@ -9,8 +9,8 @@ type Data<A> = A extends readonly [string, ...string[]] ? A[number]
   : A extends "uint" | "time" | "real" ? number
   : A extends "char" | "text" ? string
   : A extends "pkey" | "blob" ? Uint8Array
-  : A extends Type<infer B> ? Data<B>[]
-  : { [B in keyof A]: A[B] extends Type<infer C> ? Data<C> : never };
+  : A extends Type<infer B> ? B[]
+  : { [B in keyof A]: A[B] extends Type<infer C> ? C : never };
 type Type<A> = { parse: ($: Row) => A | symbol; stringify: ($: A) => Row };
 export type Infer<A> = A extends Type<infer B> ? B : never;
 const type = <A, B>(
