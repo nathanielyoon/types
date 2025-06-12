@@ -31,12 +31,12 @@ type Data<A> = A extends readonly [string, ...string[]] ? A[number]
   : A extends Byteish ? Uint8Array
   : A extends Type<infer B> ? B[]
   : { [B in keyof A]: A[B] extends Type<infer C> ? C : never };
-type Type<A = any> = { encode: ($: Row) => A | symbol; decode: ($: A) => Row };
+type Type<A = any> = { encode: ($: A) => Row; decode: ($: Row) => A | symbol };
 export type Infer<A> = A extends Type<infer B> ? B : never;
 const type = <A, B>(
   typer: (kind: A, meta: B) => [
-    ($: string, row: Row) => Data<A> | symbol,
     ($: NonNullable<Data<A>>, row: Row) => string,
+    ($: string, row: Row) => Data<A> | symbol,
   ],
 ) =>
 <const C extends A, const D extends boolean = never>(
@@ -46,14 +46,14 @@ const type = <A, B>(
   const a = meta?.optional ? null : flag.valueMissing;
   const [b, c] = typer(kind, meta! ?? {});
   return {
-    encode: ($) => {
-      const d = $.shift();
-      return d == null ? a : b(d, $) as any;
-    },
     decode: ($) => {
+      const d = $.shift();
+      return d == null ? a : c(d, $) as any;
+    },
+    encode: ($) => {
       if ($ == null) return [$];
       const d: Row = [];
-      return d.unshift(c($, d)), d;
+      return d.unshift(b($, d)), d;
     },
   };
 };
@@ -63,7 +63,7 @@ const normalize = ($: string) =>
 export const opt: ReturnType<typeof type<readonly [string, ...string[]], {}>> =
   type<readonly [string, ...string[]], {}>((kind) => {
     const a = Set.prototype.has.bind(new Set(kind));
-    return [($) => a($) ? $ : flag.badInput, normalize];
+    return [normalize, ($) => a($) ? $ : flag.badInput];
   });
 type Meta<A> = {
   [B in keyof A | "min" | "max"]?: B extends keyof A ? A[B] : number;
@@ -85,7 +85,7 @@ export const num: ReturnType<typeof type<Numeric, Meta<{ step: number }>>> =
   type<Numeric, Meta<{ step: number }>>((kind, meta) => {
     const [a, b] = clamp(meta, MIN_MAX[kind]), c = meta?.step ?? 0;
     const d = kind.includes("i") ? Number.isInteger : Number.isFinite;
-    return [($) => {
+    return [String, ($) => {
       if (!$.trim()) return flag.badInput;
       const e = +$;
       if (Number.isNaN(e)) return flag.badInput;
@@ -94,36 +94,39 @@ export const num: ReturnType<typeof type<Numeric, Meta<{ step: number }>>> =
       if (e > b) return flag.rangeOverflow;
       if (e % c) return flag.stepMismatch;
       return e;
-    }, String];
+    }];
   });
 export const str: ReturnType<typeof type<Stringy, Meta<{ pattern: RegExp }>>> =
   type<Stringy, Meta<{ pattern: RegExp }>>((kind, meta) => {
     const [a, b] = clamp(meta, MIN_MAX[kind]), c = meta?.pattern;
-    return [($) => {
+    return [normalize, ($) => {
       $ = normalize($);
       if ($.length < a) return flag.tooShort;
       if ($.length > b) return flag.tooLong;
       if (c?.test($) === false) return flag.patternMismatch;
       return $;
-    }, normalize];
+    }];
   });
 export const bin: ReturnType<typeof type<Byteish, Meta<{ step: number }>>> =
   type<Byteish, Meta<{ step: number }>>((kind, meta) => {
     const [a, b] = clamp(meta, MIN_MAX[kind]), c = meta?.step ?? 0;
-    return [($) => {
+    return [b_s64, ($) => {
       if (/[^-\w]/.test($)) return flag.badInput;
       const d = s64_b($);
       if (d.length < a) return flag.tooShort;
       if (d.length > b) return flag.tooLong;
       if (d.length % c) return flag.stepMismatch;
       return d;
-    }, b_s64];
+    }];
   });
 export const vec: ReturnType<typeof type<Type, Meta<{ unique: boolean }>>> =
   type<Type, Meta<{ unique: boolean }>>(
-    ({ encode: parse, decode: stringify }, meta) => {
+    ({ decode: parse, encode: stringify }, meta) => {
       const [a, b] = clamp(meta, [0, 0xfff]), c = !meta.unique;
       return [($, row) => {
+        for (let z = 0; z < $.length; ++z) row.push.apply(row, stringify($[z]));
+        return $.length.toString(36);
+      }, ($, row) => {
         const e = parseInt($, 36);
         if (!$.trim() || !Number.isInteger(e)) return flag.badInput;
         if (e < a) return flag.tooShort;
@@ -144,9 +147,6 @@ export const vec: ReturnType<typeof type<Type, Meta<{ unique: boolean }>>> =
           }
         }
         return f;
-      }, ($, row) => {
-        for (let z = 0; z < $.length; ++z) row.push.apply(row, stringify($[z]));
-        return $.length.toString(36);
       }];
     },
   );
@@ -154,23 +154,23 @@ export const obj: ReturnType<typeof type<{ [key: string]: Type }, Meta<{}>>> =
   type<{ [key: string]: Type }, Meta<{}>>((kind, meta) => {
     const [a, b] = clamp(meta, [0, 0xfff]), c = Object.keys(kind);
     return [($, row) => {
+      for (let z = 0; z < c.length; ++z) {
+        row.push.apply(row, kind[c[z]].encode($[c[z]]));
+      }
+      return c.length.toString(36);
+    }, ($, row) => {
       const e = parseInt($, 36);
       if (!$.trim() || !Number.isInteger(e)) return flag.badInput;
       if (e !== c.length) return flag.typeMismatch;
       const f: { [key: string]: unknown } = {}, g: { [key: string]: Json } = {};
       let h = 0;
       for (let z = 0; z < e; ++z) {
-        const i = f[c[z]] = kind[c[z]].encode(row);
+        const i = f[c[z]] = kind[c[z]].decode(row);
         if (typeof i === "symbol") g[c[z]] = open(i);
         else if (i !== null && ++h > b) return flag.tooLong;
       }
       if (h < a) return flag.tooShort;
       if (Object.keys(g).length) return flag(g);
       return f;
-    }, ($, row) => {
-      for (let z = 0; z < c.length; ++z) {
-        row.push.apply(row, kind[c[z]].decode($[c[z]]));
-      }
-      return c.length.toString(36);
     }];
   });
