@@ -15,7 +15,6 @@ export const FLAGS = [
   "valid",
   "valueMissing",
 ] as const;
-const symbol = ($: Err) => Symbol.for(JSON.stringify($));
 /** Wraps an error or errors in a `symbol`, has some defined directly. */
 export const flag = Object.assign(
   ($: string | (symbol | null)[] | { [key: string]: symbol }) =>
@@ -30,7 +29,7 @@ export const flag = Object.assign(
         ),
     )),
   FLAGS.reduce(
-    ($, flag) => ({ ...$, [flag]: symbol(flag) }),
+    ($, flag) => ({ ...$, [flag]: Symbol.for(JSON.stringify(flag)) }),
     {} as { [_ in typeof FLAGS[number]]: symbol },
   ),
 );
