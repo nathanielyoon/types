@@ -9,7 +9,7 @@ type Data<A> = A extends readonly [string, ...string[]] ? A[number]
   : A extends "uint" | "time" | "real" ? number
   : A extends "char" | "text" ? string
   : A extends "pkey" | "blob" ? Uint8Array
-  : A extends [Type<infer B>] ? Data<B>[]
+  : A extends Type<infer B> ? Data<B>[]
   : { [B in keyof A]: A[B] extends Type<infer C> ? Data<C> : never };
 type Type<A> = { parse: ($: Row) => A | symbol; stringify: ($: A) => Row };
 export type Infer<A> = A extends Type<infer B> ? B : never;
@@ -98,8 +98,8 @@ export const bin = type<"pkey" | "blob", MinMax & { step?: number }>(
     }, b_s64];
   },
 );
-export const vec = type<[Type<any>], MinMax & { unique?: boolean }>(
-  ([{ parse, stringify }], meta) => {
+export const vec = type<Type<any>, MinMax & { unique?: boolean }>(
+  ({ parse, stringify }, meta) => {
     const [a, b] = clamp(meta, [0, 0xfff]), c = !meta.unique;
     return [($, row) => {
       const e = parseInt($, 36);
