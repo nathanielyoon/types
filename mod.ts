@@ -2,8 +2,7 @@ import { b_s64, s64_b } from "@nyoon/base";
 import { Row } from "jsr:@nyoon/csv@^1.0.9";
 
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
-/** [ValidityState](https://dev.mozilla.org/Web/API/ValidityState) flags. */
-export const FLAGS = [
+const FLAGS = [ // <https://dev.mozilla.org/Web/API/ValidityState>
   "badInput",
   "patternMismatch",
   "rangeOverflow",
