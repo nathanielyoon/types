@@ -1,7 +1,7 @@
 import { b_s64, s64_b } from "@nyoon/base";
 import { Row } from "jsr:@nyoon/csv@^1.0.9";
 
-type Err = string | (Err | null)[] | { [key: string]: Err };
+type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 /** [ValidityState](https://dev.mozilla.org/Web/API/ValidityState) flags. */
 export const FLAGS = [
   "badInput",
@@ -17,24 +17,12 @@ export const FLAGS = [
 ] as const;
 /** Wraps an error or errors in a `symbol`, has some defined directly. */
 export const flag = Object.assign(
-  ($: string | (symbol | null)[] | { [key: string]: symbol }) =>
-    Symbol.for(JSON.stringify(
-      typeof $ === "string"
-        ? $
-        : Array.isArray($)
-        ? $.map(($) => JSON.stringify($ ? open($) : null))
-        : Object.keys($).reduce(
-          (all, key) => ($[key] ? { ...all, [key]: open($[key]) } : all),
-          {},
-        ),
-    )),
+  ($: Json) => Symbol.for(JSON.stringify($)),
   FLAGS.reduce((to, $) => ({ ...to, [$]: Symbol.for(JSON.stringify($)) }), {}),
-) as
-  & (($: string | (symbol | null)[] | { [key: string]: symbol }) => symbol)
-  & { [_ in typeof FLAGS[number]]: symbol };
+) as (($: Json) => symbol) & { [_ in typeof FLAGS[number]]: symbol };
 /** Unwraps the error or error held in a `symbol`. */
-export const open = <A extends Err>($: symbol): A =>
-  JSON.parse(Symbol.keyFor($) ?? '""');
+export const open = <A extends Json>($: symbol): A =>
+  JSON.parse(Symbol.keyFor($) ?? "null");
 type Numeric = "uint" | "time" | "real";
 type Stringy = "char" | "text";
 type Byteish = "pkey" | "blob";
@@ -143,10 +131,10 @@ export const vec: ReturnType<typeof type<Type, Meta<{ unique: boolean }>>> =
       if (!$.trim() || !Number.isInteger(e)) return flag.badInput;
       if (e < a) return flag.tooShort;
       if (e > b) return flag.tooLong;
-      const f = Array(e), g: (symbol | null)[] = [];
+      const f = Array(e), g: Json[] = [];
       for (let z = 0; z < e; ++z) {
         const h = f[z] = parse(row);
-        if (typeof h === "symbol") g[z] = h;
+        if (typeof h === "symbol") g[z] = open(h);
       }
       if (g.length) {
         for (let z = 0; z < e; ++z) g[z] ??= null;
@@ -171,11 +159,11 @@ export const obj: ReturnType<typeof type<{ [key: string]: Type }, Meta<{}>>> =
       const e = parseInt($, 36);
       if (!$.trim() || !Number.isInteger(e)) return flag.badInput;
       if (e !== c.length) return flag.typeMismatch;
-      const f: { [key: string]: any } = {}, g: { [key: string]: symbol } = {};
+      const f: { [key: string]: unknown } = {}, g: { [key: string]: Json } = {};
       let h = 0;
       for (let z = 0; z < e; ++z) {
         const i = f[c[z]] = kind[c[z]].parse(row);
-        if (typeof i === "symbol") g[c[z]] = i;
+        if (typeof i === "symbol") g[c[z]] = open(i);
         else if (i !== null && ++h > b) return flag.tooLong;
       }
       if (h < a) return flag.tooShort;
