@@ -3,7 +3,7 @@
 Define schemas that decode data from variable-length CSV rows.
 
 ```ts
-import { bin, num, obj, opt, str, vec } from "@nyoon/types";
+import { bin, Infer, num, obj, opt, str, vec } from "@nyoon/types";
 import { assertEquals } from "jsr:@std/assert@^1.0.13";
 
 const type = obj({
