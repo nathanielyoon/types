@@ -147,7 +147,7 @@ export const obj = type<{ [key: string]: Type<any> }, MinMax>((kind, meta) => {
     return f;
   }, ($, row) => {
     for (let z = 0; z < c.length; ++z) {
-      row.push.apply(kind[c[z]].stringify($[c[z]]));
+      row.push.apply(row, kind[c[z]].stringify($[c[z]]));
     }
     return c.length.toString(36);
   }];
