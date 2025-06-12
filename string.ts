@@ -41,7 +41,7 @@ const normalize = ($: string) =>
   $.normalize("NFC").replace(/\p{Cs}/gu, "\ufffd")
     .replace(/\r\n|\p{Zl}|\p{Zp}/gu, "\n").replace(/\p{Zs}/gu, " ");
 export const opt = type<readonly [string, ...string[]], {}>((kind) => {
-  const a = Set.prototype.has.bind(kind);
+  const a = Set.prototype.has.bind(new Set(kind));
   return [($) => a($) ? $ : flag.badInput, normalize];
 });
 type MinMax = { min?: number; max?: number };
