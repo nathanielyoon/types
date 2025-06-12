@@ -166,7 +166,7 @@ export const vec: ReturnType<typeof type<Type, Meta<{ unique: boolean }>>> =
   });
 export const obj: ReturnType<typeof type<{ [key: string]: Type }, Meta<{}>>> =
   type<{ [key: string]: Type }, Meta<{}>>((kind, meta) => {
-    const [a, b] = clamp(meta, [0, 0x3ff]), c = Object.keys(kind);
+    const [a, b] = clamp(meta, [0, 0xfff]), c = Object.keys(kind);
     return [($, row) => {
       const e = parseInt($, 36);
       if (!$.trim() || !Number.isInteger(e)) return flag.badInput;
