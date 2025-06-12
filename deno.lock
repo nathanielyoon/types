@@ -25,8 +25,7 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@nyoon/base@^2.1.1",
-      "jsr:@std/assert@^1.0.13"
+      "jsr:@nyoon/base@^2.1.1"
     ]
   }
 }
