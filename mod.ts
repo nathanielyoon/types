@@ -32,10 +32,7 @@ type Data<A> = A extends readonly [string, ...string[]] ? A[number]
   : A extends Byteish ? Uint8Array
   : A extends Type<infer B> ? B[]
   : { [B in keyof A]: A[B] extends Type<infer C> ? C : never };
-type Type<A = any> = {
-  parse: ($: Row) => A | symbol;
-  stringify: ($: A) => Row;
-};
+type Type<A = any> = { encode: ($: Row) => A | symbol; decode: ($: A) => Row };
 export type Infer<A> = A extends Type<infer B> ? B : never;
 const type = <A, B>(
   typer: (kind: A, meta: B) => [
@@ -50,11 +47,11 @@ const type = <A, B>(
   const a = meta?.optional ? null : flag.valueMissing;
   const [b, c] = typer(kind, meta! ?? {});
   return {
-    parse: ($) => {
+    encode: ($) => {
       const d = $.shift();
       return d == null ? a : b(d, $) as any;
     },
-    stringify: ($) => {
+    decode: ($) => {
       if ($ == null) return [$];
       const d: Row = [];
       return d.unshift(c($, d)), d;
@@ -124,34 +121,36 @@ export const bin: ReturnType<typeof type<Byteish, Meta<{ step: number }>>> =
     }, b_s64];
   });
 export const vec: ReturnType<typeof type<Type, Meta<{ unique: boolean }>>> =
-  type<Type, Meta<{ unique: boolean }>>(({ parse, stringify }, meta) => {
-    const [a, b] = clamp(meta, [0, 0xfff]), c = !meta.unique;
-    return [($, row) => {
-      const e = parseInt($, 36);
-      if (!$.trim() || !Number.isInteger(e)) return flag.badInput;
-      if (e < a) return flag.tooShort;
-      if (e > b) return flag.tooLong;
-      const f = Array(e), g: Json[] = [];
-      for (let z = 0; z < e; ++z) {
-        const h = f[z] = parse(row);
-        if (typeof h === "symbol") g[z] = open(h);
-      }
-      if (g.length) {
-        for (let z = 0; z < e; ++z) g[z] ??= null;
-        return flag(g);
-      }
-      if (c) return f;
-      for (let z = 0, h = new Set<string>(); z < e; ++z) {
-        if (h.size === h.add(JSON.stringify(f[z])).size) {
-          return flag.typeMismatch;
+  type<Type, Meta<{ unique: boolean }>>(
+    ({ encode: parse, decode: stringify }, meta) => {
+      const [a, b] = clamp(meta, [0, 0xfff]), c = !meta.unique;
+      return [($, row) => {
+        const e = parseInt($, 36);
+        if (!$.trim() || !Number.isInteger(e)) return flag.badInput;
+        if (e < a) return flag.tooShort;
+        if (e > b) return flag.tooLong;
+        const f = Array(e), g: Json[] = [];
+        for (let z = 0; z < e; ++z) {
+          const h = f[z] = parse(row);
+          if (typeof h === "symbol") g[z] = open(h);
         }
-      }
-      return f;
-    }, ($, row) => {
-      for (let z = 0; z < $.length; ++z) row.push.apply(row, stringify($[z]));
-      return $.length.toString(36);
-    }];
-  });
+        if (g.length) {
+          for (let z = 0; z < e; ++z) g[z] ??= null;
+          return flag(g);
+        }
+        if (c) return f;
+        for (let z = 0, h = new Set<string>(); z < e; ++z) {
+          if (h.size === h.add(JSON.stringify(f[z])).size) {
+            return flag.typeMismatch;
+          }
+        }
+        return f;
+      }, ($, row) => {
+        for (let z = 0; z < $.length; ++z) row.push.apply(row, stringify($[z]));
+        return $.length.toString(36);
+      }];
+    },
+  );
 export const obj: ReturnType<typeof type<{ [key: string]: Type }, Meta<{}>>> =
   type<{ [key: string]: Type }, Meta<{}>>((kind, meta) => {
     const [a, b] = clamp(meta, [0, 0xfff]), c = Object.keys(kind);
@@ -162,7 +161,7 @@ export const obj: ReturnType<typeof type<{ [key: string]: Type }, Meta<{}>>> =
       const f: { [key: string]: unknown } = {}, g: { [key: string]: Json } = {};
       let h = 0;
       for (let z = 0; z < e; ++z) {
-        const i = f[c[z]] = kind[c[z]].parse(row);
+        const i = f[c[z]] = kind[c[z]].encode(row);
         if (typeof i === "symbol") g[c[z]] = open(i);
         else if (i !== null && ++h > b) return flag.tooLong;
       }
@@ -171,7 +170,7 @@ export const obj: ReturnType<typeof type<{ [key: string]: Type }, Meta<{}>>> =
       return f;
     }, ($, row) => {
       for (let z = 0; z < c.length; ++z) {
-        row.push.apply(row, kind[c[z]].stringify($[c[z]]));
+        row.push.apply(row, kind[c[z]].decode($[c[z]]));
       }
       return c.length.toString(36);
     }];
