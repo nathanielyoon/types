@@ -104,7 +104,7 @@ export const vec = type<Type<any>, MinMax & { unique?: boolean }>(
     const [a, b] = clamp(meta, [0, 0xfff]), c = !meta.unique;
     return [($, row) => {
       const e = parseInt($, 36);
-      if (!$.trim() || Number.isInteger(e)) return flag.badInput;
+      if (!$.trim() || !Number.isInteger(e)) return flag.badInput;
       if (e < a) return flag.tooShort;
       if (e > b) return flag.tooLong;
       const f = Array(e), g: (symbol | null)[] = [];
@@ -133,7 +133,7 @@ export const obj = type<{ [key: string]: Type<any> }, MinMax>((kind, meta) => {
   const [a, b] = clamp(meta, [0, 0x3ff]), c = Object.keys(kind);
   return [($, row) => {
     const e = parseInt($, 36);
-    if (!$.trim() || Number.isInteger(e)) return flag.badInput;
+    if (!$.trim() || !Number.isInteger(e)) return flag.badInput;
     if (e !== c.length) return flag.typeMismatch;
     const f: { [key: string]: any } = {}, g: { [key: string]: symbol } = {};
     let h = 0;
