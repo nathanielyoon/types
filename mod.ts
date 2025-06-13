@@ -22,6 +22,12 @@ export const flag = Object.assign(
 /** Unwraps the error or error held in a `symbol`. */
 export const open = <A extends Json>($: symbol): A =>
   JSON.parse(Symbol.keyFor($) ?? "null");
+type Type<A = any, B = any, C = any> = {
+  kind: B;
+  meta: C;
+  encode: ($: A) => Row;
+  decode: ($: Row) => A | symbol;
+};
 type Numeric = "uint" | "time" | "real";
 type Stringy = "char" | "text";
 type Byteish = "pkey" | "blob";
@@ -31,7 +37,6 @@ type Data<A> = A extends readonly [string, ...string[]] ? A[number]
   : A extends Byteish ? Uint8Array
   : A extends Type<infer B> ? B[]
   : { [B in keyof A]: A[B] extends Type<infer C> ? C : never };
-type Type<A = any> = { encode: ($: A) => Row; decode: ($: Row) => A | symbol };
 export type Infer<A> = A extends Type<infer B> ? B : never;
 const type = <A, B>(
   typer: (kind: A, meta: B) => [
@@ -42,20 +47,24 @@ const type = <A, B>(
 <const C extends A, const D extends boolean = never>(
   kind: C,
   meta?: B & { optional?: D },
-): Type<Data<C> | (D extends true ? null : never)> => {
+) => {
   const a = meta?.optional ? null : flag.valueMissing;
   const [b, c] = typer(kind, meta! ?? {});
   return {
-    decode: ($) => {
+    kind,
+    meta,
+    decode: ($: Row) => {
       const d = $.shift();
-      return d == null ? a : c(d, $) as any;
+      return (d == null ? a : c(d, $)) as
+        | Data<C>
+        | (D extends true ? null : never);
     },
-    encode: ($) => {
+    encode: ($: Data<C> | (D extends true ? null : never)) => {
       if ($ == null) return [$];
       const d: Row = [];
       return d.unshift(b($, d)), d;
     },
-  };
+  } satisfies Type;
 };
 const normalize = ($: string) =>
   $.normalize("NFC").replace(/\p{Cs}/gu, "\ufffd")
@@ -68,10 +77,6 @@ export const opt: ReturnType<typeof type<readonly [string, ...string[]], {}>> =
 type Meta<A> = {
   [B in keyof A | "min" | "max"]?: B extends keyof A ? A[B] : number;
 };
-const clamp = (range: readonly [number, number, number?], $: Meta<any>) => {
-  const a = $.min ?? range[0], b = $.max ?? range[1];
-  return [Math.min(a, b), Math.max(a, b)];
-};
 const MIN_MAX = {
   uint: [0, -1 >>> 0, 8],
   time: [-864e13, 864e13, 12],
@@ -80,20 +85,25 @@ const MIN_MAX = {
   text: [0, 0xffff],
   pkey: [32, 32],
   blob: [0, 0xffff],
-} as const;
+} satisfies { [kind: string]: [min: number, max: number, radix?: number] };
+const clamp = (range: typeof MIN_MAX[keyof typeof MIN_MAX], $: Meta<any>) => {
+  const a = $.min ?? range[0], b = $.max ?? range[1];
+  return [Math.min(a, b), Math.max(a, b)];
+};
 export const num: ReturnType<typeof type<Numeric, Meta<{ step: number }>>> =
   type<Numeric, Meta<{ step: number }>>((kind, meta) => {
     const a = kind === "real" ? Number.isFinite : Number.isInteger;
-    const b = MIN_MAX[kind], [c, d] = clamp(b, meta), e = meta?.step ?? 0;
-    return [($) => `${$}`.padStart(b[2], "0"), ($) => {
+    const b = MIN_MAX[kind], c = b[2], d = c ? "0x" : "";
+    const [e, f] = clamp(b, meta), g = meta?.step ?? 0;
+    return [($) => `${$}`.padStart(c, "0"), ($) => {
       if (!$.trim()) return flag.badInput;
-      const f = +$;
-      if (Number.isNaN(f)) return flag.badInput;
-      if (!a(f)) return flag.typeMismatch;
-      if (f < c) return flag.rangeUnderflow;
-      if (f > d) return flag.rangeOverflow;
-      if (f % e) return flag.stepMismatch;
-      return f;
+      const h = +(c + $);
+      if (Number.isNaN(h)) return flag.badInput;
+      if (!a(h)) return flag.typeMismatch;
+      if (h < e) return flag.rangeUnderflow;
+      if (h > f) return flag.rangeOverflow;
+      if (h % g) return flag.stepMismatch;
+      return h;
     }];
   });
 export const str: ReturnType<typeof type<Stringy, Meta<{ pattern: RegExp }>>> =
