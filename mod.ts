@@ -1,7 +1,8 @@
 import { b_s64, s64_b } from "@nyoon/base";
 import { Row } from "jsr:@nyoon/csv@^1.0.9";
 
-type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
+/** Valid [JSON](https://www.json.org/) values, excluding `boolean`s. */
+export type Json = null | number | string | Json[] | { [key: string]: Json };
 const FLAGS = [ // <https://dev.mozilla.org/Web/API/ValidityState>
   "badInput",
   "patternMismatch",
@@ -22,7 +23,8 @@ export const flag = Object.assign(
 /** Unwraps the error or error held in a `symbol`. */
 export const open = <A extends Json>($: symbol): A =>
   JSON.parse(Symbol.keyFor($) ?? "null");
-type Type<A = any, B = any, C = any> = {
+/** Type definition. */
+export type Type<A = any, B = any, C = any> = {
   kind: B;
   meta: C;
   encode: ($: A) => Row;
