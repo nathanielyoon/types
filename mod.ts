@@ -59,7 +59,8 @@ const type = <A, B>(
       const d = $.shift();
       return (d == null ? a : c(d, $)) as
         | Data<C>
-        | (D extends true ? null : never);
+        | (D extends true ? null : never)
+        | symbol;
     },
     encode: ($: Data<C> | (D extends true ? null : never)) => {
       if ($ == null) return [$];
