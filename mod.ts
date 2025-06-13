@@ -81,9 +81,9 @@ type Meta<A> = {
   [B in keyof A | "min" | "max"]?: B extends keyof A ? A[B] : number;
 };
 const MIN_MAX = {
-  uint: [0, -1 >>> 0, 8],
-  time: [-864e13, 864e13, 12],
-  real: [-Number.MAX_VALUE, Number.MAX_VALUE, 0],
+  uint: [0, -1 >>> 0],
+  time: [-864e13, 864e13],
+  real: [-Number.MAX_VALUE, Number.MAX_VALUE],
   char: [0, 0xff],
   text: [0, 0xffff],
   pkey: [32, 32],
@@ -95,14 +95,15 @@ const clamp = (range: typeof MIN_MAX[keyof typeof MIN_MAX], $: Meta<any>) => {
 };
 export const num: ReturnType<typeof type<Numeric, Meta<{ step: number }>>> =
   type<Numeric, Meta<{ step: number }>>((kind, meta) => {
-    const a = kind === "real" ? Number.isFinite : Number.isInteger;
-    const b = MIN_MAX[kind], c = b[2], d = c ? "0x" : "";
-    const [e, f] = clamp(b, meta), g = meta?.step ?? 0;
-    return [($) => `${$}`.padStart(c, "0"), ($) => {
+    const [a, b, c, d] = kind === "real"
+      ? [10, 0, "", Number.isFinite]
+      : [16, kind === "time" ? 12 : 0, "0x", Number.isInteger];
+    const [e, f] = clamp(MIN_MAX[kind], meta), g = meta?.step ?? 0;
+    return [($) => $.toString(a).padStart(b, "0"), ($) => {
       if (!$.trim()) return flag.badInput;
       const h = +(c + $);
       if (Number.isNaN(h)) return flag.badInput;
-      if (!a(h)) return flag.typeMismatch;
+      if (!d(h)) return flag.typeMismatch;
       if (h < e) return flag.rangeUnderflow;
       if (h > f) return flag.rangeOverflow;
       if (h % g) return flag.stepMismatch;
