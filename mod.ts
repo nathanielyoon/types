@@ -68,14 +68,14 @@ export const opt: ReturnType<typeof type<readonly [string, ...string[]], {}>> =
 type Meta<A> = {
   [B in keyof A | "min" | "max"]?: B extends keyof A ? A[B] : number;
 };
-const clamp = ($: Meta<any>, range: readonly [min: number, max: number]) => {
+const clamp = (range: readonly [number, number, number?], $: Meta<any>) => {
   const a = $.min ?? range[0], b = $.max ?? range[1];
   return [Math.min(a, b), Math.max(a, b)];
 };
 const MIN_MAX = {
-  uint: [0, -1 >>> 0],
-  time: [-864e13, 864e13],
-  real: [-Number.MAX_VALUE, Number.MAX_VALUE],
+  uint: [0, -1 >>> 0, 8],
+  time: [-864e13, 864e13, 12],
+  real: [-Number.MAX_VALUE, Number.MAX_VALUE, 0],
   char: [0, 0xff],
   text: [0, 0xffff],
   pkey: [32, 32],
@@ -83,22 +83,22 @@ const MIN_MAX = {
 } as const;
 export const num: ReturnType<typeof type<Numeric, Meta<{ step: number }>>> =
   type<Numeric, Meta<{ step: number }>>((kind, meta) => {
-    const [a, b] = clamp(meta, MIN_MAX[kind]), c = meta?.step ?? 0;
-    const d = kind.includes("i") ? Number.isInteger : Number.isFinite;
-    return [String, ($) => {
+    const a = kind === "real" ? Number.isFinite : Number.isInteger;
+    const b = MIN_MAX[kind], [c, d] = clamp(b, meta), e = meta?.step ?? 0;
+    return [($) => `${$}`.padStart(b[2], "0"), ($) => {
       if (!$.trim()) return flag.badInput;
-      const e = +$;
-      if (Number.isNaN(e)) return flag.badInput;
-      if (!d(e)) return flag.typeMismatch;
-      if (e < a) return flag.rangeUnderflow;
-      if (e > b) return flag.rangeOverflow;
-      if (e % c) return flag.stepMismatch;
-      return e;
+      const f = +$;
+      if (Number.isNaN(f)) return flag.badInput;
+      if (!a(f)) return flag.typeMismatch;
+      if (f < c) return flag.rangeUnderflow;
+      if (f > d) return flag.rangeOverflow;
+      if (f % e) return flag.stepMismatch;
+      return f;
     }];
   });
 export const str: ReturnType<typeof type<Stringy, Meta<{ pattern: RegExp }>>> =
   type<Stringy, Meta<{ pattern: RegExp }>>((kind, meta) => {
-    const [a, b] = clamp(meta, MIN_MAX[kind]), c = meta?.pattern;
+    const [a, b] = clamp(MIN_MAX[kind], meta), c = meta?.pattern;
     return [normalize, ($) => {
       $ = normalize($);
       if ($.length < a) return flag.tooShort;
@@ -109,7 +109,7 @@ export const str: ReturnType<typeof type<Stringy, Meta<{ pattern: RegExp }>>> =
   });
 export const bin: ReturnType<typeof type<Byteish, Meta<{ step: number }>>> =
   type<Byteish, Meta<{ step: number }>>((kind, meta) => {
-    const [a, b] = clamp(meta, MIN_MAX[kind]), c = meta?.step ?? 0;
+    const [a, b] = clamp(MIN_MAX[kind], meta), c = meta?.step ?? 0;
     return [b_s64, ($) => {
       if (/[^-\w]/.test($)) return flag.badInput;
       const d = s64_b($);
@@ -122,7 +122,7 @@ export const bin: ReturnType<typeof type<Byteish, Meta<{ step: number }>>> =
 export const vec: ReturnType<typeof type<Type, Meta<{ unique: boolean }>>> =
   type<Type, Meta<{ unique: boolean }>>(
     ({ decode: parse, encode: stringify }, meta) => {
-      const [a, b] = clamp(meta, [0, 0xfff]), c = !meta.unique;
+      const [a, b] = clamp([0, 0xfff], meta), c = !meta.unique;
       return [($, row) => {
         for (let z = 0; z < $.length; ++z) row.push.apply(row, stringify($[z]));
         return $.length.toString(36);
@@ -152,7 +152,7 @@ export const vec: ReturnType<typeof type<Type, Meta<{ unique: boolean }>>> =
   );
 export const obj: ReturnType<typeof type<{ [key: string]: Type }, Meta<{}>>> =
   type<{ [key: string]: Type }, Meta<{}>>((kind, meta) => {
-    const [a, b] = clamp(meta, [0, 0xfff]), c = Object.keys(kind);
+    const [a, b] = clamp([0, 0xfff], meta), c = Object.keys(kind);
     return [($, row) => {
       for (let z = 0; z < c.length; ++z) {
         row.push.apply(row, kind[c[z]].encode($[c[z]]));
