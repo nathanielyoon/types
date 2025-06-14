@@ -39,6 +39,7 @@ type Data<A> = A extends readonly [string, ...string[]] ? A[number]
   : A extends Byteish ? Uint8Array
   : A extends Type<infer B> ? B[]
   : { [B in keyof A]: A[B] extends Type<infer C> ? C : never };
+/** Decoded data. */
 export type Infer<A> = A extends Type<infer B> ? B : never;
 type All<A> = A extends object ? { [B in keyof A]: A[B] } : never;
 const type = <A, B>(
@@ -76,6 +77,7 @@ const type = <A, B>(
 const normalize = ($: string) =>
   $.normalize("NFC").replace(/\p{Cs}/gu, "\ufffd")
     .replace(/\r\n|\p{Zl}|\p{Zp}/gu, "\n").replace(/\p{Zs}/gu, " ");
+/** Creates an enum type. */
 export const opt: ReturnType<typeof type<readonly [string, ...string[]], {}>> =
   type<readonly [string, ...string[]], {}>((kind) => {
     const a = Set.prototype.has.bind(new Set(kind));
@@ -98,6 +100,7 @@ const clamp = (range: typeof RANGE[keyof typeof RANGE], $: Meta<any>) => {
   const a = $.min ?? range[0], b = $.max ?? range[1];
   return [Math.min(a, b), Math.max(a, b)];
 };
+/** Creates a number type. */
 export const num: ReturnType<typeof type<Numeric, Meta<{ step: number }>>> =
   type<Numeric, Meta<{ step: number }>>((kind, meta) => {
     const [a, b, c, d] = kind === "real"
@@ -115,6 +118,7 @@ export const num: ReturnType<typeof type<Numeric, Meta<{ step: number }>>> =
       return h;
     }];
   });
+/** Creates a string type. */
 export const str: ReturnType<typeof type<Stringy, Meta<{ pattern: RegExp }>>> =
   type<Stringy, Meta<{ pattern: RegExp }>>((kind, meta) => {
     const [a, b] = clamp(RANGE[kind], meta), c = meta?.pattern;
@@ -126,6 +130,7 @@ export const str: ReturnType<typeof type<Stringy, Meta<{ pattern: RegExp }>>> =
       return $;
     }];
   });
+/** Creates a binary type. */
 export const bin: ReturnType<typeof type<Byteish, Meta<{ step: number }>>> =
   type<Byteish, Meta<{ step: number }>>((kind, meta) => {
     const [a, b] = clamp(RANGE[kind], meta), c = meta?.step ?? 0;
@@ -138,6 +143,7 @@ export const bin: ReturnType<typeof type<Byteish, Meta<{ step: number }>>> =
       return d;
     }];
   });
+/** Creates a vector type. */
 export const vec: ReturnType<typeof type<Type, Meta<{ unique: boolean }>>> =
   type<Type, Meta<{ unique: boolean }>>(
     ({ decode: parse, encode: stringify }, meta) => {
@@ -169,6 +175,7 @@ export const vec: ReturnType<typeof type<Type, Meta<{ unique: boolean }>>> =
       }];
     },
   );
+/** Creates an object type. */
 export const obj: ReturnType<typeof type<{ [key: string]: Type }, Meta<{}>>> =
   type<{ [key: string]: Type }, Meta<{}>>((kind, meta) => {
     const [a, b] = clamp([0, 0xfff], meta), c = Object.keys(kind);
