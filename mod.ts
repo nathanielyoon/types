@@ -133,7 +133,7 @@ export const str: ReturnType<typeof type<Stringy, Meta<{ pattern: RegExp }>>> =
 /** Creates a binary type. */
 export const bin: ReturnType<typeof type<Byteish, Meta<{ step: number }>>> =
   type<Byteish, Meta<{ step: number }>>((kind, meta) => {
-    const [a, b] = clamp(RANGE[kind], meta), c = meta?.step ?? 0;
+    const [a, b] = clamp(RANGE[kind], meta), c = Math.abs(meta?.step ?? 0);
     return [b_s64, ($) => {
       if (/[^-\w]/.test($)) return flag.badInput;
       const d = s64_b($);
