@@ -74,7 +74,8 @@ const type = <A, B>(
     },
   } satisfies Type;
 };
-const normalize = ($: string) =>
+/** Canonicalizes, replaces lone surrogates, and standardizes whitespace. */
+export const normalize = ($: string) =>
   $.normalize("NFC").replace(/\p{Cs}/gu, "\ufffd")
     .replace(/\r\n|\p{Zl}|\p{Zp}/gu, "\n").replace(/\p{Zs}/gu, " ");
 /** Creates an enum type. */
@@ -96,7 +97,8 @@ export const RANGE: { [_ in Numeric | Stringy | Byteish]: [number, number] } = {
   pkey: [32, 32],
   blob: [0, 0xffff],
 };
-const clamp = (range: typeof RANGE[keyof typeof RANGE], $: Meta<any>) => {
+/** Normalizes a range. */
+export const clamp = (range: typeof RANGE[keyof typeof RANGE], $: Meta<{}>) => {
   const a = $.min ?? range[0], b = $.max ?? range[1];
   return [Math.min(a, b), Math.max(a, b)];
 };
