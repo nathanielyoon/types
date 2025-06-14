@@ -80,7 +80,8 @@ export const opt: ReturnType<typeof type<readonly [string, ...string[]], {}>> =
 type Meta<A> = {
   [B in keyof A | "min" | "max"]?: B extends keyof A ? A[B] : number;
 };
-const MIN_MAX = {
+/** Numeric or length ranges. */
+export const MIN_MAX = {
   uint: [0, -1 >>> 0],
   time: [-864e13, 864e13],
   real: [-Number.MAX_VALUE, Number.MAX_VALUE],
