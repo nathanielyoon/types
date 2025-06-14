@@ -75,7 +75,7 @@ const type = <A, B>(
   } satisfies Type;
 };
 /** Canonicalizes, replaces lone surrogates, and standardizes whitespace. */
-export const normalize = ($: string) =>
+export const normalize = ($: string): string =>
   $.normalize("NFC").replace(/\p{Cs}/gu, "\ufffd")
     .replace(/\r\n|\p{Zl}|\p{Zp}/gu, "\n").replace(/\p{Zs}/gu, " ");
 /** Creates an enum type. */
@@ -84,7 +84,7 @@ export const opt: ReturnType<typeof type<readonly [string, ...string[]], {}>> =
     const a = Set.prototype.has.bind(new Set(kind));
     return [normalize, ($) => a($) ? $ : flag.badInput];
   });
-type Meta<A> = {
+type Meta<A = {}> = {
   [B in keyof A | "min" | "max"]?: B extends keyof A ? A[B] : number;
 };
 /** Numeric or length ranges. */
@@ -98,7 +98,7 @@ export const RANGE: { [_ in Numeric | Stringy | Byteish]: [number, number] } = {
   blob: [0, 0xffff],
 };
 /** Normalizes a range. */
-export const clamp = (range: typeof RANGE[keyof typeof RANGE], $: Meta<{}>) => {
+export const clamp = (range: [number, number], $: Meta): [number, number] => {
   const a = $.min ?? range[0], b = $.max ?? range[1];
   return [Math.min(a, b), Math.max(a, b)];
 };
@@ -178,27 +178,29 @@ export const vec: ReturnType<typeof type<Type, Meta<{ unique: boolean }>>> =
     },
   );
 /** Creates an object type. */
-export const obj: ReturnType<typeof type<{ [key: string]: Type }, Meta<{}>>> =
-  type<{ [key: string]: Type }, Meta<{}>>((kind, meta) => {
-    const [a, b] = clamp([0, 0xfff], meta), c = Object.keys(kind);
-    return [($, row) => {
-      for (let z = 0; z < c.length; ++z) {
-        row.push.apply(row, kind[c[z]].encode($[c[z]]));
-      }
-      return c.length.toString(36);
-    }, ($, row) => {
-      const e = parseInt($, 36);
-      if (!$.trim() || !Number.isInteger(e)) return flag.badInput;
-      if (e !== c.length) return flag.typeMismatch;
-      const f: { [key: string]: unknown } = {}, g: { [key: string]: Json } = {};
-      let h = 0;
-      for (let z = 0; z < e; ++z) {
-        const i = f[c[z]] = kind[c[z]].decode(row);
-        if (typeof i === "symbol") g[c[z]] = open(i);
-        else if (i !== null && ++h > b) return flag.tooLong;
-      }
-      if (h < a) return flag.tooShort;
-      if (Object.keys(g).length) return flag(g);
-      return f;
-    }];
-  });
+export const obj: ReturnType<typeof type<{ [key: string]: Type }, Meta>> = type<
+  { [key: string]: Type },
+  Meta
+>((kind, meta) => {
+  const [a, b] = clamp([0, 0xfff], meta), c = Object.keys(kind);
+  return [($, row) => {
+    for (let z = 0; z < c.length; ++z) {
+      row.push.apply(row, kind[c[z]].encode($[c[z]]));
+    }
+    return c.length.toString(36);
+  }, ($, row) => {
+    const e = parseInt($, 36);
+    if (!$.trim() || !Number.isInteger(e)) return flag.badInput;
+    if (e !== c.length) return flag.typeMismatch;
+    const f: { [key: string]: unknown } = {}, g: { [key: string]: Json } = {};
+    let h = 0;
+    for (let z = 0; z < e; ++z) {
+      const i = f[c[z]] = kind[c[z]].decode(row);
+      if (typeof i === "symbol") g[c[z]] = open(i);
+      else if (i !== null && ++h > b) return flag.tooLong;
+    }
+    if (h < a) return flag.tooShort;
+    if (Object.keys(g).length) return flag(g);
+    return f;
+  }];
+});
