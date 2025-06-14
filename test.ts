@@ -37,7 +37,7 @@ const assert_ok = (type: Type) => ($: Row) => {
 };
 const all: [Type, Row[], readonly [Row, Json][]][] = [];
 const test = <
-  A extends keyof Omit<typeof mod, "flag" | "open" | "MIN_MAX">,
+  A extends keyof Omit<typeof mod, "flag" | "open" | "RANGE">,
   B extends [Parameters<typeof mod[A]>, Infer<ReturnType<typeof mod[A]>>],
 >(
   name: A,
@@ -46,24 +46,27 @@ const test = <
   no: (...$: B) => Generator<readonly [Row, Json]>,
 ) =>
   Deno.test(name, () =>
-    fc.assert(
-      fc.property(params, ($) => {
-        const a = mod[name] as (...$: any) => Type, b = a(...$[0]);
-        all.push([
-          b,
-          Array.from(ok(...$), assert_ok(b)),
-          Array.from(no(...$), ([row, json]) => {
-            const c = b.decode([...row]);
-            assert(typeof c === "symbol"), assertEquals(open(c), json);
-            return [row, json];
-          }),
-        ]);
-        all.push([b, [], [[[null], "valueMissing"]]]);
-        const c = a($[0][0], { ...$[0][1], optional: true });
-        all.push([c, [assert_ok(c)([null])], []]);
-      }),
-      { numRuns: 16 },
-    ));
+    fc.assert(fc.property(params, ($) => {
+      const a = mod[name] as (...$: any) => Type, b = a(...$[0]);
+      all.push([
+        b,
+        Array.from(ok(...$), assert_ok(b)),
+        Array.from(no(...$), ([row, json]) => {
+          const c = b.decode([...row]);
+          try {
+            assert(typeof c === "symbol");
+          } catch (thrown) {
+            console.log([$, c]);
+            throw thrown;
+          }
+          assertEquals(open(c), json);
+          return [row, json];
+        }),
+      ]);
+      all.push([b, [], [[[null], "valueMissing"]]]);
+      const c = a($[0][0], { ...$[0][1], optional: true });
+      all.push([c, [assert_ok(c)([null])], []]);
+    })));
 const fc_type = <A, B>(kind: A, meta: { [C in keyof B]: fc.Arbitrary<B[C]> }) =>
   fc.tuple(
     fc.constant(kind),
@@ -116,16 +119,23 @@ test(
       for (let z = f; z < i; z += h) if (z % h === 0) yield [n_s(kind, z)];
     } else yield [n_s(kind, $)];
   },
-  function* ([kind, meta]) {
+  function* ([kind, meta], $) {
     yield* ["", " ", "z"].map<[Row, Json]>(($) => [[$], "badInput"]);
-    // const [a, b] = MIN_MAX[kind];
-    // if (is(meta)) {
-    //   if (meta?.min != null && meta.min > a) {
-    //     yield* [a, meta.min - 1].map<[Row, Json]>(
-    //       ($) => [[n_s(kind, $)], "rangeUnderflow"],
-    //     );
-    //   }
-    // }
+    if (kind === "real") {
+      yield [["1e309"], "typeMismatch"];
+      yield [["-1e309"], "typeMismatch"];
+    }
+    const [a, b] = RANGE[kind];
+    if (!is(meta)) return;
+    const c = Math.max(meta.min ?? a, a), d = Math.min(meta.max ?? b, b);
+    const e = Math.min(c, d), f = e - 1;
+    if (e !== a && f < e && f >= a) yield [[n_s(kind, f)], "rangeUnderflow"];
+    const g = Math.max(c, d), h = g + 1;
+    if (g !== b && h > g && h <= b) yield [[n_s(kind, h)], "rangeOverflow"];
+    if (meta.step) {
+      const i = e + meta.step;
+      if (i % meta.step && i <= a) yield [[n_s(kind, i)], "stepMismatch"];
+    }
   },
 );
 Deno.test("all", () => {
