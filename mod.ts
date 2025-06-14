@@ -153,7 +153,7 @@ export const vec: ReturnType<typeof type<Type, Meta<{ unique: boolean }>>> =
         return $.length.toString(36);
       }, ($, row) => {
         const e = parseInt($, 36);
-        if (!$.trim() || !Number.isInteger(e) || e < 0) return flag.badInput;
+        if (!$.trim() || $ !== e.toString(36) || e < 0) return flag.badInput;
         if (e < a) return flag.tooShort;
         if (e > b) return flag.tooLong;
         const f = Array(e), g: Json[] = [];
@@ -188,7 +188,7 @@ export const obj: ReturnType<typeof type<{ [key: string]: Type }, Meta>> = type<
     return c.length.toString(36);
   }, ($, row) => {
     const e = parseInt($, 36);
-    if (!$.trim() || !Number.isInteger(e) || e < 0) return flag.badInput;
+    if (!$.trim() || $ !== e.toString(36) || e < 0) return flag.badInput;
     if (e !== c.length) return flag.typeMismatch;
     const f: { [key: string]: unknown } = {}, g: { [key: string]: Json } = {};
     let h = 0;
