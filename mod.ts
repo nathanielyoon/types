@@ -47,11 +47,13 @@ const type = <A, B>(
     ($: string, row: Row) => Data<A> | symbol,
   ],
 ) =>
-<
-  const C extends A,
-  const D extends All<B & { optional?: boolean }> = never,
->(kind: C, meta?: D): Type<
-  Data<C> | (D extends { optional: true } ? null : never),
+<const C extends A, const D extends All<B & { optional?: boolean }> = never>(
+  kind: C,
+  meta?: D,
+): Type<
+  | Data<C>
+  | (D["optional"] extends true ? null
+    : never),
   C,
   D
 > => {
@@ -60,7 +62,7 @@ const type = <A, B>(
   return {
     kind,
     meta: meta!,
-    encode: ($: Data<C> | (D extends { optional: true } ? null : never)) => {
+    encode: ($: Data<C> | (D["optional"] extends true ? null : never)) => {
       if ($ == null) return [$];
       const d: Row = [];
       return d.unshift(b($, d)), d;
@@ -83,7 +85,7 @@ type Meta<A> = {
   [B in keyof A | "min" | "max"]?: B extends keyof A ? A[B] : number;
 };
 /** Numeric or length ranges. */
-export const MIN_MAX = {
+export const RANGE: { [_ in Numeric | Stringy | Byteish]: [number, number] } = {
   uint: [0, -1 >>> 0],
   time: [0, 281474976710655],
   real: [-Number.MAX_VALUE, Number.MAX_VALUE],
@@ -91,8 +93,8 @@ export const MIN_MAX = {
   text: [0, 0xffff],
   pkey: [32, 32],
   blob: [0, 0xffff],
-} satisfies { [kind: string]: [min: number, max: number, radix?: number] };
-const clamp = (range: typeof MIN_MAX[keyof typeof MIN_MAX], $: Meta<any>) => {
+};
+const clamp = (range: typeof RANGE[keyof typeof RANGE], $: Meta<any>) => {
   const a = $.min ?? range[0], b = $.max ?? range[1];
   return [Math.min(a, b), Math.max(a, b)];
 };
@@ -101,7 +103,7 @@ export const num: ReturnType<typeof type<Numeric, Meta<{ step: number }>>> =
     const [a, b, c, d] = kind === "real"
       ? [10, 0, "", Number.isFinite]
       : [16, kind === "time" ? 12 : 0, "0x", Number.isInteger];
-    const [e, f] = clamp(MIN_MAX[kind], meta), g = meta?.step ?? 0;
+    const [e, f] = clamp(RANGE[kind], meta), g = meta?.step ?? 0;
     return [($) => $.toString(a).padStart(b, "0"), ($) => {
       if (!$.trim()) return flag.badInput;
       const h = +(c + $);
@@ -115,7 +117,7 @@ export const num: ReturnType<typeof type<Numeric, Meta<{ step: number }>>> =
   });
 export const str: ReturnType<typeof type<Stringy, Meta<{ pattern: RegExp }>>> =
   type<Stringy, Meta<{ pattern: RegExp }>>((kind, meta) => {
-    const [a, b] = clamp(MIN_MAX[kind], meta), c = meta?.pattern;
+    const [a, b] = clamp(RANGE[kind], meta), c = meta?.pattern;
     return [normalize, ($) => {
       $ = normalize($);
       if ($.length < a) return flag.tooShort;
@@ -126,7 +128,7 @@ export const str: ReturnType<typeof type<Stringy, Meta<{ pattern: RegExp }>>> =
   });
 export const bin: ReturnType<typeof type<Byteish, Meta<{ step: number }>>> =
   type<Byteish, Meta<{ step: number }>>((kind, meta) => {
-    const [a, b] = clamp(MIN_MAX[kind], meta), c = meta?.step ?? 0;
+    const [a, b] = clamp(RANGE[kind], meta), c = meta?.step ?? 0;
     return [b_s64, ($) => {
       if (/[^-\w]/.test($)) return flag.badInput;
       const d = s64_b($);

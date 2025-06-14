@@ -6,11 +6,11 @@ import {
   flag,
   Infer,
   Json,
-  MIN_MAX,
   num,
   obj,
   open,
   opt,
+  RANGE,
   str,
   Type,
   vec,
@@ -108,7 +108,7 @@ test(
     if (is(meta)) {
       if (meta.min! > meta.max! || meta.step === 0) return; // nothing matches
       const a = (["min", "max", "step"] as const).map(($) => meta[$] != null);
-      const [b, c] = MIN_MAX[kind];
+      const [b, c] = RANGE[kind];
       const d = Math.max(meta.min ?? b, b), e = Math.min(meta.max ?? c, c);
       const f = Math.min(d, e), g = Math.max(d, e);
       const h = Math.abs(meta.step ?? Math.floor((g - f) / 10));
