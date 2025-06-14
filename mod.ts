@@ -40,32 +40,34 @@ type Data<A> = A extends readonly [string, ...string[]] ? A[number]
   : A extends Type<infer B> ? B[]
   : { [B in keyof A]: A[B] extends Type<infer C> ? C : never };
 export type Infer<A> = A extends Type<infer B> ? B : never;
+type All<A> = A extends object ? { [B in keyof A]: A[B] } : never;
 const type = <A, B>(
   typer: (kind: A, meta: B) => [
     ($: NonNullable<Data<A>>, row: Row) => string,
     ($: string, row: Row) => Data<A> | symbol,
   ],
 ) =>
-<const C extends A, const D extends boolean = never>(
-  kind: C,
-  meta?: B & { optional?: D },
-) => {
+<
+  const C extends A,
+  const D extends All<B & { optional?: boolean }> = never,
+>(kind: C, meta?: D): Type<
+  Data<C> | (D extends { optional: true } ? null : never),
+  C,
+  D
+> => {
   const a = meta?.optional ? null : flag.valueMissing;
   const [b, c] = typer(kind, meta! ?? {});
   return {
     kind,
-    meta,
-    decode: ($: Row) => {
-      const d = $.shift();
-      return (d == null ? a : c(d, $)) as
-        | Data<C>
-        | (D extends true ? null : never)
-        | symbol;
-    },
-    encode: ($: Data<C> | (D extends true ? null : never)) => {
+    meta: meta!,
+    encode: ($: Data<C> | (D extends { optional: true } ? null : never)) => {
       if ($ == null) return [$];
       const d: Row = [];
       return d.unshift(b($, d)), d;
+    },
+    decode: ($: Row) => {
+      const d = $.shift();
+      return (d == null ? a : c(d, $)) as any;
     },
   } satisfies Type;
 };
