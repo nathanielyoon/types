@@ -108,7 +108,7 @@ export const num: ReturnType<typeof type<Numeric, Meta<{ step: number }>>> =
     const [a, b, c, d] = kind === "real"
       ? [10, 0, "", Number.isFinite]
       : [16, kind === "time" ? 12 : 0, "0x", Number.isInteger];
-    const [e, f] = clamp(RANGE[kind], meta), g = meta?.step ?? 0;
+    const [e, f] = clamp(RANGE[kind], meta), g = meta?.step || 0;
     return [($) => $.toString(a).padStart(b, "0"), ($) => {
       if (!$.trim()) return flag.badInput;
       const h = +(c + $);
