@@ -83,7 +83,7 @@ type Meta<A> = {
 /** Numeric or length ranges. */
 export const MIN_MAX = {
   uint: [0, -1 >>> 0],
-  time: [-864e13, 864e13],
+  time: [0, 281474976710655],
   real: [-Number.MAX_VALUE, Number.MAX_VALUE],
   char: [0, 0xff],
   text: [0, 0xffff],
