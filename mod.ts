@@ -105,18 +105,16 @@ export const clamp = (range: [number, number], $: Meta): [number, number] => {
 /** Creates a number type. */
 export const num: ReturnType<typeof type<Numeric, Meta<{ step: number }>>> =
   type<Numeric, Meta<{ step: number }>>((kind, meta) => {
-    const [a, b, c, d] = kind === "real"
-      ? [10, 0, "", Number.isFinite]
-      : [16, kind === "time" ? 12 : 0, "0x", Number.isInteger];
-    const [e, f] = clamp(RANGE[kind], meta), g = meta?.step || 0;
-    return [($) => $.toString(a).padStart(b, "0"), ($) => {
+    const [a, b] = kind === "real" ? [10, ""] : [16, "0x"];
+    const c = kind === "time" ? 12 : 0, [d, e] = clamp(RANGE[kind], meta);
+    const f = meta?.step || 0;
+    return [($) => $.toString(a).padStart(c, "0"), ($) => {
       if (!$.trim()) return flag.badInput;
-      const h = +(c + $);
+      const h = +(b + $);
       if (Number.isNaN(h)) return flag.badInput;
-      if (!d(h)) return flag.typeMismatch;
-      if (h < e) return flag.rangeUnderflow;
-      if (h > f) return flag.rangeOverflow;
-      if (h % g) return flag.stepMismatch;
+      if (h < d) return flag.rangeUnderflow;
+      if (h > e) return flag.rangeOverflow;
+      if (h % f) return flag.stepMismatch;
       return h;
     }];
   });
