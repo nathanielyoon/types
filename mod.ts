@@ -43,7 +43,8 @@ type Data<A, B = never> =
     : { [B in keyof A]: A[B] extends Type<infer C> ? C : never });
 /** Decoded data. */
 export type Infer<A> = A extends Type<infer B> ? B : never;
-type All<A> = A extends { [key: string]: any } ? { [B in keyof A]: A[B] } : A;
+type All<A> = A extends number | string | Uint8Array | any[] ? A
+  : { [B in keyof A]: A[B] };
 const typer = <A, B>(
   typer: (kind: A, meta: B) => [
     ($: NonNullable<All<Data<A, B>>>, row: Row) => string,
