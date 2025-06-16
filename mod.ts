@@ -54,12 +54,10 @@ const typer = <A, B>(
 ) =>
 <const C extends A, const D extends All<B & { optional?: boolean }> = never>(
   kind: C,
-  meta?: D,
-  process?: [post_encode: ($: Row) => void, pre_decode: ($: Row) => void],
+  meta?: D & { process?: [encode: ($: Row) => void, decode: ($: Row) => void] },
 ): Type<All<Data<C, D>>, C, D> => {
   const a = meta?.optional ? null : flag.valueMissing;
-  const [b, c] = typer(kind, meta! ?? {});
-  const [d, e] = process ?? [];
+  const [b, c] = typer(kind, meta! ?? {}), [d, e] = meta?.process ?? [];
   return {
     kind,
     meta: meta!,
