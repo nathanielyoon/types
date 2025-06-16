@@ -46,7 +46,6 @@ export type Infer<A> = A extends Type<infer B> ? B : never;
 type All<A> = A extends number | string | Uint8Array | any[] ? A
   : { [B in keyof A]: A[B] };
 type Meta<A = {}> = All<Partial<A> & { min?: number; max?: number }>;
-type To = { post?: ($: Row) => void; pre?: ($: Row) => void };
 const typer = <A, B>(
   typer: (kind: A, meta: B) => [
     ($: NonNullable<All<Data<A, B>>>, row: Row) => string,
@@ -55,23 +54,25 @@ const typer = <A, B>(
 ) =>
 <const C extends A, const D extends All<B & { optional?: boolean }> = never>(
   kind: C,
-  meta?: All<D & { post?: ($: Row) => void; pre?: ($: Row) => void }>,
+  meta?: D,
+  process?: [post_encode: ($: Row) => void, pre_decode: ($: Row) => void],
 ): Type<All<Data<C, D>>, C, D> => {
   const a = meta?.optional ? null : flag.valueMissing;
   const [b, c] = typer(kind, meta! ?? {});
+  const [d, e] = process ?? [];
   return {
     kind,
     meta: meta!,
     encode: ($: All<Data<C, D>>) => {
-      const d: Row = [];
-      $ == null ? d.push(null) : d.unshift(b($, d));
-      meta?.post?.(d);
-      return d;
+      const f: Row = [];
+      $ == null ? f.push(null) : f.unshift(b($, f));
+      d?.(f);
+      return f;
     },
     decode: ($: Row) => {
-      meta?.pre?.($);
-      const d = $.shift();
-      return (d == null ? a : c(d, $)) as any;
+      e?.($);
+      const f = $.shift();
+      return (f == null ? a : c(f, $)) as any;
     },
   } satisfies Type;
 };
