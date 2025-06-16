@@ -48,9 +48,10 @@ type All<A> = A extends number | string | Uint8Array | any[] ? A
 type Meta<A = {}> = All<Partial<A> & { min?: number; max?: number }>;
 const typer = <A, B>(
   typer: (kind: A, meta: B) => [
-    ($: NonNullable<All<Data<A, B>>>, row: Row) => string,
+    ($: NonNullable<All<Data<A, B>>>, row: Row) => string | void,
     ($: string, row: Row) => All<Data<A, B>> | symbol,
   ],
+  skip_first = false,
 ) =>
 <const C extends A, const D extends All<B & { optional?: boolean }> = never>(
   kind: C,
@@ -63,12 +64,17 @@ const typer = <A, B>(
     meta: meta!,
     encode: ($: All<Data<C, D>>) => {
       const f: Row = [];
-      $ == null ? f.push(null) : f.unshift(b($, f));
+      if ($ == null) f.push(null);
+      else {
+        const g = b($, f);
+        if (g != null) f.unshift(g);
+      }
       d?.(f);
       return f;
     },
     decode: ($: Row) => {
       e?.($);
+      if (skip_first) return c("", $);
       const f = $.shift();
       return (f == null ? a : c(f, $)) as any;
     },
@@ -180,20 +186,16 @@ export const obj: ReturnType<typeof typer<{ [key: string]: Type }, Meta>> =
       for (let z = 0; z < c.length; ++z) {
         row.push.apply(row, kind[c[z]].encode($[c[z]]));
       }
-      return c.length.toString(36);
-    }, ($, row) => {
-      const e = parseInt($, 36);
-      if (!$.trim() || $ !== e.toString(36) || e < 0) return flag.badInput;
-      if (e !== c.length) return flag.typeMismatch;
-      const f: { [key: string]: unknown } = {}, g: { [key: string]: Json } = {};
-      let h = 0;
-      for (let z = 0; z < e; ++z) {
-        const i = f[c[z]] = kind[c[z]].decode(row);
-        if (typeof i === "symbol") g[c[z]] = open(i);
-        else if (i !== null && ++h > b) return flag.tooLong;
+    }, (_, row) => {
+      const d: { [key: string]: unknown } = {}, e: { [key: string]: Json } = {};
+      let f = 0;
+      for (let z = 0; z < c.length; ++z) {
+        const g = d[c[z]] = kind[c[z]].decode(row);
+        if (typeof g === "symbol") e[c[z]] = open(g);
+        else if (g !== null && ++f > b) return flag.tooLong;
       }
-      if (h < a) return flag.tooShort;
-      if (Object.keys(g).length) return flag(g);
-      return f;
+      if (f < a) return flag.tooShort;
+      if (Object.keys(e).length) return flag(e);
+      return d;
     }];
-  });
+  }, true);

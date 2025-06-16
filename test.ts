@@ -290,22 +290,17 @@ Deno.test("obj", () => {
     2: opt(["2"], { optional: true }),
   }, { min: 1, max: 2 });
   [
-    ["3", "0", null, null],
-    ["3", null, "1", null],
-    ["3", null, null, "2"],
-    ["3", "0", "1", null],
-    ["3", "0", null, "2"],
-    ["3", null, "1", "2"],
+    ["0", null, null],
+    [null, "1", null],
+    [null, null, "2"],
+    ["0", "1", null],
+    ["0", null, "2"],
+    [null, "1", "2"],
   ].forEach(assert_ok(a));
   ([
-    [[""], "badInput"],
-    [[" "], "badInput"],
-    [["0.1"], "badInput"],
-    [["-1"], "badInput"],
-    [["0"], "typeMismatch"],
-    [["3", null, null, null], "tooShort"],
-    [["3", "0", "1", "2"], "tooLong"],
-    [["3", "0", "4", null], { 1: "badInput" }],
+    [[null, null, null], "tooShort"],
+    [["0", "1", "2"], "tooLong"],
+    [["0", "4", null], { 1: "badInput" }],
   ] satisfies [Row, Json][]).forEach(assert_no(a));
 });
 Deno.test("all", () => {
@@ -314,12 +309,12 @@ Deno.test("all", () => {
     a[z] = vec(all[z][0]);
     b[z] = [all[z][1].length.toString(36), ...all[z][1].flat()];
   }
-  const c = obj(a), d = b.length.toString(36);
-  assert_ok(c)([d, ...b.flat()]);
+  const c = obj(a);
+  assert_ok(c)(b.flat());
   for (let z = 0; z < all.length; ++z) {
     const e = all[z][2][0];
     e && assert_no(c)(
-      [[d, ...b.with(z, ["1", ...e[0]]).flat()], { [z]: [e[1]] }],
+      [b.with(z, ["1", ...e[0]]).flat(), { [z]: [e[1]] }],
     );
   }
 });
