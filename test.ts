@@ -25,6 +25,13 @@ Deno.test("flag", () => {
     ($) => assertEquals(open(flag($)), $),
   ));
 });
+Deno.test("pre post", () => {
+  const a = opt([""], {
+    pre: ($: Row) => $[0] = `${$[0]}`.slice(1),
+    post: ($: Row) => $[0] = $[0] += "!",
+  });
+  assertEquals(a.decode(a.encode("")), "");
+});
 const assert_ok = (type: Type) => ($: Row) => {
   const a = type.decode([...$]);
   try {

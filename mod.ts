@@ -45,6 +45,8 @@ type Data<A, B = never> =
 export type Infer<A> = A extends Type<infer B> ? B : never;
 type All<A> = A extends number | string | Uint8Array | any[] ? A
   : { [B in keyof A]: A[B] };
+type Meta<A = {}> = All<Partial<A> & { min?: number; max?: number }>;
+type To = { post?: ($: Row) => void; pre?: ($: Row) => void };
 const typer = <A, B>(
   typer: (kind: A, meta: B) => [
     ($: NonNullable<All<Data<A, B>>>, row: Row) => string,
@@ -53,7 +55,7 @@ const typer = <A, B>(
 ) =>
 <const C extends A, const D extends All<B & { optional?: boolean }> = never>(
   kind: C,
-  meta?: D,
+  meta?: All<D & { post?: ($: Row) => void; pre?: ($: Row) => void }>,
 ): Type<All<Data<C, D>>, C, D> => {
   const a = meta?.optional ? null : flag.valueMissing;
   const [b, c] = typer(kind, meta! ?? {});
@@ -61,11 +63,13 @@ const typer = <A, B>(
     kind,
     meta: meta!,
     encode: ($: All<Data<C, D>>) => {
-      if ($ == null) return [null];
       const d: Row = [];
-      return d.unshift(b($, d)), d;
+      $ == null ? d.push(null) : d.unshift(b($, d));
+      meta?.post?.(d);
+      return d;
     },
     decode: ($: Row) => {
+      meta?.pre?.($);
       const d = $.shift();
       return (d == null ? a : c(d, $)) as any;
     },
@@ -81,9 +85,6 @@ export const opt: ReturnType<typeof typer<readonly [string, ...string[]], {}>> =
     const a = Set.prototype.has.bind(new Set(kind));
     return [normalize, ($) => a($) ? $ : flag.badInput];
   });
-type Meta<A = {}> = {
-  [B in keyof A | "min" | "max"]?: B extends keyof A ? A[B] : number;
-};
 /** Numeric or length ranges. */
 export const RANGE: { [_ in Numeric | Stringy | Byteish]: [number, number] } = {
   uint: [0, -1 >>> 0],
