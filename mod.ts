@@ -215,9 +215,10 @@ export const obj = <const A extends { [key: string]: Type | Primitive }>(
   return new Type(kind, ($, row) => {
     const e = parseInt($, 36);
     if (!$.trim() || $ !== e.toString(36) || e < 0) return flag("badInput");
+    if (e !== c.length) return flag("typeMismatch");
     const f = {} as { [B in keyof A]: any }, g: { [key: string]: Json } = {};
     let h = 0;
-    for (let z = 0; z < c.length; ++z) {
+    for (let z = 0; z < e; ++z) {
       const i = f[c[z] as keyof A] = d[c[z]].parse(row);
       if (typeof i === "symbol") g[c[z]] = open(i);
       else if (i !== null && ++h > b) return flag("tooLong");
