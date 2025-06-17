@@ -112,7 +112,7 @@ Deno.test("hook", async ($) => {
           else assert(typeof c === "symbol"), assertEquals(open(c), ["0"]);
         } else assertEquals(b.stringify(0), [ok ? "1" : "0"]);
       })));
-  await step("pre_parse", (ok) => ($) => ok ? void $.unshift("1") : flag($));
+  await step("pre_parse", (ok) => ($) => ok ? $.unshift("1") : flag($));
   await step("post_parse", (ok) => ($) => ok ? $ + 1 : flag([`${$}`]));
   await step("pre_stringify", (ok) => ($) => ok ? $ + 1 : $);
   await step("post_stringify", (ok) => ($) => ok && ($[0] = `${+$[0]! + 1}`));

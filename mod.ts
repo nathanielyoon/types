@@ -21,7 +21,7 @@ export class Type<A = any, B = {}> {
     return this as Type<Exclude<A, null>, B>;
   }
   private hooks = {
-    pre_parse: (() => {}) as ($: Row) => void | symbol,
+    pre_parse: (() => {}) as ($: Row) => any,
     post_parse: (($) => $) as ($: A) => A | symbol,
     pre_stringify: (($) => $) as ($: A) => A,
     post_stringify: (() => {}) as ($: Row) => void,
@@ -44,7 +44,7 @@ export class Type<A = any, B = {}> {
   /** Converts a CSV row to the specified type or a `symbol` (error). */
   parse($: Row): A | symbol {
     const a = this.hooks.pre_parse($);
-    if (a) return a;
+    if (typeof a === "symbol") return a;
     const b = $.shift();
     if (b == null) return this.nil;
     const c = this.decode(b, $);
