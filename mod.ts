@@ -15,6 +15,11 @@ export class Type<A = any, B = {}> {
     this.nil = null as A;
     return this as Type<A | null, B>;
   }
+  /** Makes a `Type` required. */
+  really(): Type<Exclude<A, null>, B> {
+    this.nil = flag("valueMissing");
+    return this as Type<Exclude<A, null>, B>;
+  }
   private hooks = {
     pre_parse: (() => {}) as ($: Row) => void | symbol,
     post_parse: (($) => $) as ($: A) => A | symbol,
