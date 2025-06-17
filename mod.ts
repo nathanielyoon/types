@@ -27,11 +27,11 @@ export class Type<A = any, B = {}> {
     post_stringify: (() => {}) as ($: Row) => void,
   };
   /** Adds a hook to one of the processes. */
-  on<A extends keyof typeof this.hooks>(on: A, $: typeof this.hooks[A]): this {
+  on<A extends keyof typeof this.hooks>(on: A, to: typeof this.hooks[A]): this {
     const a = this.hooks[on];
     this.hooks[on] = ($: any) => {
       const b = a($);
-      return (typeof b === "symbol" ? b : $(b ?? $)) as any;
+      return (typeof b === "symbol" ? b : to(b ?? $)) as any;
     };
     return this;
   }
