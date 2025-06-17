@@ -7,21 +7,26 @@ export const flag = ($: Json): symbol => Symbol.for(JSON.stringify($));
 /** Unwraps the error or error held in a `symbol`. */
 export const open = <A extends Json>($: symbol): A =>
   JSON.parse(Symbol.keyFor($) ?? "null");
-class Type<A = any, B = {}> {
+/** Type for parsing and stringifying variable-length data. */
+export class Type<A = any, B = {}> {
   private nil: A | symbol = flag("valueMissing");
+  /** Makes a `Type` optional. */
   maybe(): Type<A | null, B> {
     this.nil = null as A;
     return this as Type<A | null, B>;
   }
+  /** Creates a type for parsing and stringifying CSV data. */
   constructor(
     public meta: B,
     private decode: ($: string, row: Row) => A | symbol,
     private encode: ($: NonNullable<A>, row: Row) => string,
   ) {}
+  /** Converts a CSV row to the specified type or a `symbol` (error). */
   parse($: Row): A | symbol {
     const a = $.shift();
     return a == null ? this.nil : this.decode(a, $);
   }
+  /** Converts the specified type to a CSV row (or portion thereof). */
   stringify($: A): Row {
     const a: Row = [];
     return $ == null ? a.push(null) : a.unshift(this.encode($, a)), a;
