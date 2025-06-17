@@ -15,6 +15,21 @@ export class Type<A = any, B = {}> {
     this.nil = null as A;
     return this as Type<A | null, B>;
   }
+  private hooks = {
+    pre_parse: (() => {}) as ($: Row) => void | symbol,
+    post_parse: (($) => $) as ($: A) => A | symbol,
+    pre_stringify: (($) => $) as ($: A) => A,
+    post_stringify: (() => {}) as ($: Row) => void,
+  };
+  /** Adds a hook to one of the processes. */
+  hook<A extends keyof typeof this.hooks>(on: A, hook: typeof this.hooks[A]) {
+    const a = this.hooks[on];
+    this.hooks[on] = ($: any) => {
+      const b = a($);
+      return (typeof b === "symbol" ? b : hook(b ?? $)) as any;
+    };
+    return this;
+  }
   /** Creates a type for parsing and stringifying CSV data. */
   constructor(
     public meta: B,
@@ -23,13 +38,22 @@ export class Type<A = any, B = {}> {
   ) {}
   /** Converts a CSV row to the specified type or a `symbol` (error). */
   parse($: Row): A | symbol {
-    const a = $.shift();
-    return a == null ? this.nil : this.decode(a, $);
+    const a = this.hooks.pre_parse($);
+    if (a) return a;
+    const b = $.shift();
+    if (b == null) return this.nil;
+    const c = this.decode(b, $);
+    if (typeof c === "symbol") return c;
+    return this.hooks.post_parse(c);
   }
   /** Converts the specified type to a CSV row (or portion thereof). */
   stringify($: A): Row {
     const a: Row = [];
-    return $ == null ? a.push(null) : a.unshift(this.encode($, a)), a;
+    $ = this.hooks.pre_stringify($);
+    if ($ == null) a.push(null);
+    else a.unshift(this.encode($, a));
+    this.hooks.post_stringify(a);
+    return a;
   }
 }
 /** Parsed data. */
@@ -39,7 +63,7 @@ export const normalize = ($: string): string =>
   $.normalize("NFC").replace(/\p{Cs}/gu, "\ufffd")
     .replace(/\r\n|\p{Zl}|\p{Zp}/gu, "\n").replace(/\p{Zs}/gu, " ");
 /** Creates an option type. */
-export const opt = <const A extends [string, ...string[]]>(
+export const opt = <const A extends readonly [string, ...string[]]>(
   options: A,
 ): Type<A[number], A> => {
   const a = Set.prototype.has.bind(new Set(options));
