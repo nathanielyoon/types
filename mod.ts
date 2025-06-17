@@ -58,11 +58,11 @@ export const RANGE = {
 } as const;
 /** Normalizes a range. */
 export const clamp = (
-  range: readonly [number, number],
+  [min, max]: readonly [number, number],
   $?: { min?: number; max?: number },
 ): [number, number] => {
-  const a = $?.min ?? range[0], b = $?.max ?? range[1];
-  return [Math.min(a, b), Math.max(a, b)];
+  const a = Math.max($?.min ?? min, min), b = Math.min($?.max ?? max, max);
+  return [Math.max(Math.min(a, b), min), Math.min(Math.max(a, b), max)];
 };
 /** Creates a number type. */
 export const num = <A extends "uint" | "time" | "real">(
