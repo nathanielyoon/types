@@ -1,19 +1,15 @@
-/// <reference lib="dom" />
 import { Row } from "jsr:@nyoon/csv@^1.0.9";
 
 /** Valid [JSON](https://www.json.org/) values, excluding `boolean`s. */
 export type Json = null | number | string | Json[] | { [key: string]: Json };
 /** Wraps an error or errors in a `symbol`. */
-export const flag = (($: Json): symbol => Symbol.for(JSON.stringify($))) as {
-  <A extends keyof ValidityStateFlags>($: A): symbol;
-  ($: Json): symbol;
-};
+export const flag = ($: Json): symbol => Symbol.for(JSON.stringify($));
 /** Unwraps the error or error held in a `symbol`. */
 export const open = <A extends Json>($: symbol): A =>
   JSON.parse(Symbol.keyFor($) ?? "null");
 class Type<A = any, B = {}> {
   private nil: A | symbol = flag("valueMissing");
-  maybe() {
+  maybe(): Type<A | null, B> {
     this.nil = null as A;
     return this as Type<A | null, B>;
   }
@@ -22,11 +18,11 @@ class Type<A = any, B = {}> {
     private decode: ($: string, row: Row) => A | symbol,
     private encode: ($: NonNullable<A>, row: Row) => string,
   ) {}
-  parse($: Row) {
+  parse($: Row): A | symbol {
     const a = $.shift();
     return a == null ? this.nil : this.decode(a, $);
   }
-  stringify($: A) {
+  stringify($: A): Row {
     const a: Row = [];
     return $ == null ? a.push(null) : a.unshift(this.encode($, a)), a;
   }
