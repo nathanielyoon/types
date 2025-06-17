@@ -61,19 +61,27 @@ export class Type<A = any, B = {}> {
     return a;
   }
 }
+type Numbery = "uint" | "time" | "real";
+type Stringy = "pkey" | "char" | "text";
+type Primitive = Numbery | Stringy | `${Numbery | Stringy}?`;
 /** Parsed data. */
-export type As<A> = A extends Type<infer B> ? B : never;
+export type As<A extends Type | Primitive> = A extends Type<infer B> ? B
+  : A extends Numbery ? number
+  : A extends Stringy ? string
+  : A extends `${Numbery}?` ? number | null
+  : A extends `${Stringy}?` ? string | null
+  : never;
 /** Canonicalizes, replaces lone surrogates, and standardizes whitespace. */
 export const normalize = ($: string): string =>
   $.normalize("NFC").replace(/\p{Cs}/gu, "\ufffd")
     .replace(/\r\n|\p{Zl}|\p{Zp}/gu, "\n").replace(/\p{Zs}/gu, " ");
 /** Creates an option type. */
 export const opt = <const A extends readonly [string, ...string[]]>(
-  options: A,
+  kind: A,
 ): Type<A[number], A> => {
-  const a = Set.prototype.has.bind(new Set(options));
+  const a = Set.prototype.has.bind(new Set(kind));
   return new Type(
-    options,
+    kind,
     ($) => a($ = normalize($)) ? $ : flag("badInput"),
     normalize,
   );
@@ -95,7 +103,7 @@ export const clamp = (
   return [Math.max(Math.min(a, b), min), Math.min(Math.max(a, b), max)];
 };
 /** Creates a number type. */
-export const num = <A extends "uint" | "time" | "real">(
+export const num = <A extends Numbery>(
   kind: A,
   meta?: { min?: number; max?: number; step?: number },
 ): Type<number, A> => {
@@ -112,91 +120,114 @@ export const num = <A extends "uint" | "time" | "real">(
     return h;
   }, ($) => $.toString(a).padStart(c, "0"));
 };
-const PKEY = /^[-\w]{43}$/;
 /** Creates a string type. */
-export const str = ((
-  kind: "pkey" | "char" | "text",
-  meta?: { min?: number; max?: number; pattern?: RegExp },
-) => {
-  if (kind === "pkey") {
-    return new Type(
-      kind,
-      ($) => PKEY.test($) ? $ : flag("badInput"),
-      ($) => PKEY.exec($)?.[0] ?? "A".repeat(43),
-    );
+export const str =
+  ((kind: Stringy, meta?: { min?: number; max?: number; pattern?: RegExp }) => {
+    if (kind === "pkey") {
+      return new Type(
+        kind,
+        ($) => /^[-\w]{43}$/.test($) ? $ : flag("badInput"),
+        ($) => /^[-\w]{43}$/.exec($)?.[0] ?? "A".repeat(43),
+      );
+    }
+    const [a, b] = clamp(RANGE[kind], meta), c = meta?.pattern;
+    return new Type(kind, ($) => {
+      $ = normalize($);
+      if ($.length < a) return flag("tooShort");
+      if ($.length > b) return flag("tooLong");
+      if (c?.test($) === false) return flag("patternMismatch");
+      return $;
+    }, normalize);
+  }) as {
+    (kind: "pkey"): Type<string, "pkey">;
+    <A extends "char" | "text">(
+      kind: A,
+      meta?: { min?: number; max?: number; pattern?: RegExp },
+    ): Type<string, A>;
+  };
+const primitive = (kind: Primitive) => {
+  switch (kind) {
+    case "uint":
+    case "time":
+    case "real":
+      return num(kind);
+    case "pkey":
+      return str(kind);
+    case "char":
+    case "text":
+      return str(kind);
+    case "uint?":
+    case "time?":
+    case "real?":
+      return num(kind.slice(0, -1) as Parameters<typeof num>[0]).maybe();
+    case "pkey?":
+      return str(kind.slice(0, -1) as Parameters<typeof str>[0]).maybe();
+    case "char?":
+    case "text?":
+      return str(kind.slice(0, -1) as Parameters<typeof str>[0]).maybe();
   }
-  const [a, b] = clamp(RANGE[kind], meta), c = meta?.pattern;
-  return new Type(kind, ($) => {
-    $ = normalize($);
-    if ($.length < a) return flag("tooShort");
-    if ($.length > b) return flag("tooLong");
-    if (c?.test($) === false) return flag("patternMismatch");
-    return $;
-  }, normalize);
-}) as {
-  (kind: "pkey"): Type<string, "pkey">;
-  <A extends "char" | "text">(
-    kind: A,
-    meta?: { min?: number; max?: number; pattern?: RegExp },
-  ): Type<string, A>;
 };
 /** Creates a vector type. */
-export const vec = <const A extends Type>(
+export const vec = <const A extends Type | Primitive>(
   kind: A,
   meta?: { min?: number; max?: number; unique?: boolean },
 ): Type<As<A>[], A> => {
   const [a, b] = clamp([0, 0xfff], meta), c = meta?.unique;
+  const d: Type = typeof kind === "string" ? primitive(kind) : kind;
   return new Type(kind, ($, row) => {
-    const d = parseInt($, 36);
-    if (!$.trim() || $ !== d.toString(36) || d < 0) return flag("badInput");
-    if (d < a) return flag("tooShort");
-    if (d > b) return flag("tooLong");
-    const e = Array(d), f: Json[] = [];
-    for (let z = 0; z < d; ++z) {
-      const g = e[z] = kind.parse(row);
-      if (typeof g === "symbol") f[z] = open(g);
+    const e = parseInt($, 36);
+    if (!$.trim() || $ !== e.toString(36) || e < 0) return flag("badInput");
+    if (e < a) return flag("tooShort");
+    if (e > b) return flag("tooLong");
+    const f = Array(e), g: Json[] = [];
+    for (let z = 0; z < e; ++z) {
+      const h = f[z] = d.parse(row);
+      if (typeof h === "symbol") g[z] = open(h);
     }
-    if (f.length) {
-      for (let z = 0; z < d; ++z) f[z] ??= null;
-      return flag(f);
+    if (g.length) {
+      for (let z = 0; z < e; ++z) g[z] ??= null;
+      return flag(g);
     }
     if (c) {
-      for (let z = 0, g = new Set<string>(); z < d; ++z) {
-        if (g.size === g.add(JSON.stringify(e[z])).size) {
+      for (let z = 0, h = new Set<string>(); z < e; ++z) {
+        if (h.size === h.add(JSON.stringify(f[z])).size) {
           return flag("typeMismatch");
         }
       }
     }
-    return e;
+    return f;
   }, ($, row) => {
-    for (let z = 0; z < $.length; ++z) {
-      row.push.apply(row, kind.stringify($[z]));
-    }
+    for (let z = 0; z < $.length; ++z) row.push.apply(row, d.stringify($[z]));
     return $.length.toString(36);
   });
 };
 /** Creates an object type. */
-export const obj = <const A extends { [key: string]: Type }>(
+export const obj = <const A extends { [key: string]: Type | Primitive }>(
   kind: A,
   meta?: { min?: number; max?: number },
 ): Type<{ [B in keyof A]: As<A[B]> }, A> => {
   const [a, b] = clamp([0, 0xfff], meta), c = Object.keys(kind);
+  const d: { [key: string]: Type } = {};
+  for (let z = 0; z < c.length; ++z) {
+    const e = kind[c[z]];
+    d[c[z]] = typeof e === "string" ? primitive(e) : e;
+  }
   return new Type(kind, ($, row) => {
-    const d = parseInt($, 36);
-    if (!$.trim() || $ !== d.toString(36) || d < 0) return flag("badInput");
-    const e = {} as { [B in keyof A]: any }, f: { [key: string]: Json } = {};
-    let g = 0;
+    const e = parseInt($, 36);
+    if (!$.trim() || $ !== e.toString(36) || e < 0) return flag("badInput");
+    const f = {} as { [B in keyof A]: any }, g: { [key: string]: Json } = {};
+    let h = 0;
     for (let z = 0; z < c.length; ++z) {
-      const h = e[c[z] as keyof A] = kind[c[z]].parse(row);
-      if (typeof h === "symbol") f[c[z]] = open(h);
-      else if (h !== null && ++g > b) return flag("tooLong");
+      const i = f[c[z] as keyof A] = d[c[z]].parse(row);
+      if (typeof i === "symbol") g[c[z]] = open(i);
+      else if (i !== null && ++h > b) return flag("tooLong");
     }
-    if (g < a) return flag("tooShort");
-    if (Object.keys(f).length) return flag(f);
-    return e;
+    if (h < a) return flag("tooShort");
+    if (Object.keys(g).length) return flag(g);
+    return f;
   }, ($, row) => {
     for (let z = 0; z < c.length; ++z) {
-      row.push.apply(row, kind[c[z]].stringify($[c[z]]));
+      row.push.apply(row, d[c[z]].stringify($[c[z]]));
     }
     return c.length.toString(36);
   });
