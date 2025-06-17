@@ -3,7 +3,7 @@
 Define schemas that decode data from variable-length CSV rows.
 
 ```ts
-import { bin, Infer, num, obj, opt, str, vec } from "@nyoon/types";
+import { As, num, obj, opt, str, vec } from "@nyoon/types";
 import { assertEquals } from "jsr:@std/assert@^1.0.13";
 
 const type = obj({
@@ -14,12 +14,9 @@ const type = obj({
     real: num("real", { max: 1e5 }),
   }),
   str: obj({
+    pkey: str("pkey"),
     char: str("char", { pattern: /^[\da-f]+$/ }),
     text: str("text", { min: 1, max: 33 }),
-  }),
-  bin: obj({
-    pkey: bin("pkey"),
-    blob: bin("blob", { max: 0x1000 }),
   }),
   vec: vec(opt(["d", "e", "f"])),
 });
@@ -31,14 +28,11 @@ const data = {
     real: -0.1,
   },
   str: {
+    pkey: "A".repeat(43),
     char: "dada",
     text: "hello!",
   },
-  bin: {
-    pkey: crypto.getRandomValues(new Uint8Array(32)),
-    blob: new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]),
-  },
   vec: ["f", "e", "d"],
-} satisfies Infer<typeof type>;
-assertEquals(type.decode(type.encode(data)), data);
+} satisfies As<typeof type>;
+assertEquals(type.parse(type.stringify(data)), data);
 ```
