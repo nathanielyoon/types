@@ -20,16 +20,16 @@ export class Type<A = any, B = {}> {
     this.nil = flag("valueMissing");
     return this as Type<Exclude<A, null>, B>;
   }
-  private hooks = {
+  private hook = {
     pre_parse: (() => {}) as ($: Row) => void | symbol,
     post_parse: (($) => $) as ($: A) => A | symbol,
     pre_stringify: (($) => $) as ($: A) => A,
     post_stringify: (() => {}) as ($: Row) => void,
   };
   /** Adds a hook to one of the processes. */
-  hook<A extends keyof typeof this.hooks>(on: A, hook: typeof this.hooks[A]) {
-    const a = this.hooks[on];
-    this.hooks[on] = ($: any) => {
+  on<A extends keyof typeof this.hook>(at: A, hook: typeof this.hook[A]): this {
+    const a = this.hook[at];
+    this.hook[at] = ($: any) => {
       const b = a($);
       return (typeof b === "symbol" ? b : hook(b ?? $)) as any;
     };
@@ -43,21 +43,21 @@ export class Type<A = any, B = {}> {
   ) {}
   /** Converts a CSV row to the specified type or a `symbol` (error). */
   parse($: Row): A | symbol {
-    const a = this.hooks.pre_parse($);
+    const a = this.hook.pre_parse($);
     if (a) return a;
     const b = $.shift();
     if (b == null) return this.nil;
     const c = this.decode(b, $);
     if (typeof c === "symbol") return c;
-    return this.hooks.post_parse(c);
+    return this.hook.post_parse(c);
   }
   /** Converts the specified type to a CSV row (or portion thereof). */
   stringify($: A): Row {
     const a: Row = [];
-    $ = this.hooks.pre_stringify($);
+    $ = this.hook.pre_stringify($);
     if ($ == null) a.push(null);
     else a.unshift(this.encode($, a));
-    this.hooks.post_stringify(a);
+    this.hook.post_stringify(a);
     return a;
   }
 }

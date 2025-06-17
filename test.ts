@@ -105,7 +105,7 @@ Deno.test("hook", async ($) => {
   ) =>
     $.step(on, () =>
       fc.assert(fc.property(fc.boolean(), (ok) => {
-        const a = hook(ok), b = num("real").hook(on, a);
+        const a = hook(ok), b = num("real").on(on, a);
         if (on.endsWith("parse")) {
           const c = b.parse(["0"]);
           if (ok) assertEquals(c, 1);
@@ -123,8 +123,8 @@ Deno.test("hook", async ($) => {
     (one, two, $) =>
       assert_type(
         num("real")
-          .hook("post_parse", ($) => one ? $ : flag(1))
-          .hook("post_parse", ($) => two ? $ : flag(2)),
+          .on("post_parse", ($) => one ? $ : flag(1))
+          .on("post_parse", ($) => two ? $ : flag(2)),
       )(
         [one && two && [`${$}`]],
         [!one && [[`${$}`], 1] || !two && [[`${$}`], 2]],
