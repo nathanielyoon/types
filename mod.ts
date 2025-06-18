@@ -109,16 +109,17 @@ export const num = <A extends Numbery>(
 ): Type<number, A> => {
   const [a, b] = kind === "real" ? [10, ""] : [16, "0x"];
   const c = kind === "time" ? 12 : 0, [d, e] = clamp(RANGE[kind], meta);
-  const f = meta?.step || 0;
+  const f = meta?.step || 0, g = ($: number) => $.toString(a).padStart(c, "0");
   return new Type(kind, ($) => {
     if (!$.trim()) return flag("badInput");
     const h = +(b + $);
     if (Number.isNaN(h)) return flag("badInput");
+    if ($ !== g(h)) return flag("typeMismatch");
     if (h < d) return flag("rangeUnderflow");
     if (h > e) return flag("rangeOverflow");
     if (h % f) return flag("stepMismatch");
     return h;
-  }, ($) => $.toString(a).padStart(c, "0"));
+  }, g);
 };
 /** Creates a string type. */
 export const str =
