@@ -151,7 +151,7 @@ Deno.test("num", async ($) => {
         [["00"], "typeMismatch"],
       ]);
       fc.assert(fc.property(arb, arb, (min, max) => {
-        type(vec(num(kind)), [["2", a(min), a(max)]], []);
+        type(vec(kind), [["2", a(min), a(max)]], []);
         const [c, d] = clamp(RANGE[kind], { min, max });
         type(num(kind, { min: c, max: d }), [
           [a(c)],
@@ -190,8 +190,131 @@ Deno.test("str", async ($) => {
       ($) => assertEquals(str("pkey").stringify($), ["A".repeat(43)]),
     ));
   });
+  const a = ($: number) => "\0".repeat($);
   for (const kind of ["char", "text"] as const) {
     await $.step(kind, () => {
+      const b = fc.nat({ max: RANGE[kind][1] });
+      fc.assert(fc.property(b, b, (min, max) => {
+        type(vec(str(kind)), [["2", a(min), a(max)]], []);
+        const [c, d] = clamp(RANGE[kind], { min, max });
+        type(str(kind, { min: c, max: d }), [
+          [a(c)],
+          [a(d)],
+          c + 1 <= d && [a(c + 1)],
+          d - 1 >= c && [a(d - 1)],
+        ], [
+          c && c - 1 < c && [[a(c - 1)], "tooShort"],
+          d + 1 > d && [[a(d + 1)], "tooLong"],
+        ]);
+      }));
+      fc.assert(fc.property(
+        fc.stringMatching(/^[^$(-+./?[-^{|}]+$/).map(RegExp).chain(($) =>
+          fc.tuple(fc.constant($), fc.stringMatching($))
+        ),
+        ([pattern, $]) =>
+          type(str(kind, { pattern }), [[$]], [[[""], "patternMismatch"]]),
+      ));
     });
   }
+});
+Deno.test("composite", async ($) => {
+  for (
+    const [kind, arbitrary, map] of [
+      [
+        "uint",
+        fc_number({ min: 0, max: 0xffffffff }).map(Math.floor),
+        ($: number) => $.toString(16),
+      ],
+      [
+        "time",
+        fc_number({ min: 0, max: 2 ** 48 - 1 }).map(Math.floor),
+        ($: number) => $.toString(16).padStart(12, "0"),
+      ],
+      ["real", fc_number()],
+      ["pkey", fc.uint8Array({ minLength: 32, maxLength: 32 }).map(b_s64)],
+      ["char", fc.string({ maxLength: RANGE.char[1] })],
+      ["text", fc.string({ maxLength: RANGE.text[1] })],
+    ] as const
+  ) {
+    await $.step(kind, () =>
+      fc.assert(fc.property(
+        arbitrary,
+        ($) => {
+          const a = ["1", map?.($ as number) ?? `${$}`], b = ["1", null];
+          type(vec(kind), [a], [[b, ["valueMissing"]]]);
+          type(vec(`${kind}?`), [a, b], []);
+          type(obj({ [kind]: kind }), [a], [[b, { [kind]: "valueMissing" }]]);
+          type(obj({ [kind]: `${kind}?` }), [a, b], []);
+        },
+      )));
+  }
+  const a = fc.record({
+    min: fc.nat({ max: 0xfff }),
+    max: fc.nat({ max: 0xfff }),
+  });
+  await $.step("vec", () => {
+    const b = ($: number) => [
+      $.toString(36),
+      ...Array.from({ length: $ }, () => "\0"),
+    ];
+    type(
+      vec("char").maybe(),
+      [[null]],
+      ["", " ", "00", "-1"].map<[Row, Json]>(($) => [[$], "badInput"]),
+    );
+    fc.assert(
+      fc.property(
+        a,
+        ($) => {
+          const [c, d] = clamp([0, 0xfff], $);
+          type(
+            vec("char", { min: c, max: d }),
+            [b(c), b(d), c < d && b(c + 1), d > c && b(d - 1)],
+            [c && [b(c - 1), "tooShort"], [b(d + 1), "tooLong"]],
+          );
+        },
+      ),
+      { numRuns: 9 },
+    );
+    type(
+      vec("char", { unique: true }),
+      [b(0), b(1)],
+      [[b(2), "typeMismatch"]],
+    );
+  });
+  await $.step("obj", () => {
+    const b = ($: number) => [
+      (0xfff).toString(36),
+      ...Array.from({ length: $ }, () => "\0"),
+      ...Array.from({ length: 0xfff - $ }, () => null),
+    ];
+    type(
+      obj({ char: "char" }).maybe(),
+      [[null]],
+      [
+        ...["", " ", "00", "-1"].map<[Row, Json]>(($) => [[$], "badInput"]),
+        [["0"], "typeMismatch"],
+      ],
+    );
+    fc.assert(
+      fc.property(
+        a,
+        ($) => {
+          const [c, d] = clamp([0, 0xfff], $);
+          type(
+            obj(
+              Array.from({ length: 0xfff }, (_, z) => z).reduce(
+                (types, $) => ({ ...types, [$]: "char?" }),
+                {},
+              ),
+              { min: c, max: d },
+            ),
+            [b(c), b(d), c < d && b(c + 1), d > c && b(d - 1)],
+            [c && [b(c - 1), "tooShort"], d < 0xfff && [b(d + 1), "tooLong"]],
+          );
+        },
+      ),
+      { numRuns: 3 },
+    );
+  });
 });
