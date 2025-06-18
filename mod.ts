@@ -94,10 +94,16 @@ export const RANGE = {
   char: [0, 0xff],
   text: [0, 0xffff],
 } as const;
+type All<A> = A extends any[] | Uint8Array ? A
+  : A extends { [key: string]: any } ? { [B in keyof A]: A[B] }
+  : A;
+type Meta<A = {}> = All<
+  { [B in keyof A | "min" | "max"]?: B extends keyof A ? A[B] : number }
+>;
 /** Normalizes a range. */
 export const clamp = (
   [min, max]: readonly [number, number],
-  $?: { min?: number; max?: number },
+  $?: Meta,
 ): [number, number] => {
   const a = Math.max($?.min ?? min, min), b = Math.min($?.max ?? max, max);
   return [Math.max(Math.min(a, b), min), Math.min(Math.max(a, b), max)];
@@ -105,7 +111,7 @@ export const clamp = (
 /** Creates a number type. */
 export const num = <A extends Numbery>(
   kind: A,
-  meta?: { min?: number; max?: number; step?: number },
+  meta?: Meta<{ step: number }>,
 ): Type<number, A> => {
   const [a, b] = kind === "real" ? [10, ""] : [16, "0x"];
   const c = kind === "time" ? 12 : 0, [d, e] = clamp(RANGE[kind], meta);
@@ -122,31 +128,31 @@ export const num = <A extends Numbery>(
   }, g);
 };
 /** Creates a string type. */
-export const str =
-  ((kind: Stringy, meta?: { min?: number; max?: number; pattern?: RegExp }) => {
-    if (kind === "pkey") {
-      return new Type(
-        kind,
-        ($) => /^[-\w]{43}$/.test($) ? $ : flag("badInput"),
-        ($) => /^[-\w]{43}$/.exec($)?.[0] ?? "A".repeat(43),
-      );
-    }
-    const [a, b] = clamp(RANGE[kind], meta), c = meta?.pattern;
-    return new Type(kind, ($) => {
-      $ = normalize($);
-      if ($.length < a) return flag("tooShort");
-      if ($.length > b) return flag("tooLong");
-      if (c?.test($) === false) return flag("patternMismatch");
-      return $;
-    }, normalize);
-  }) as {
-    (kind: "pkey"): Type<string, "pkey">;
-    <A extends "char" | "text">(
-      kind: A,
-      meta?: { min?: number; max?: number; pattern?: RegExp },
-    ): Type<string, A>;
-  };
-const primitive = (kind: Primitive) => {
+export const str = ((kind: Stringy, meta?: Meta<{ pattern: RegExp }>) => {
+  if (kind === "pkey") {
+    return new Type(
+      kind,
+      ($) => /^[-\w]{43}$/.test($) ? $ : flag("badInput"),
+      ($) => /^[-\w]{43}$/.exec($)?.[0] ?? "A".repeat(43),
+    );
+  }
+  const [a, b] = clamp(RANGE[kind], meta), c = meta?.pattern;
+  return new Type(kind, ($) => {
+    $ = normalize($);
+    if ($.length < a) return flag("tooShort");
+    if ($.length > b) return flag("tooLong");
+    if (c?.test($) === false) return flag("patternMismatch");
+    return $;
+  }, normalize);
+}) as {
+  (kind: "pkey"): Type<string, "pkey">;
+  <A extends "char" | "text">(
+    kind: A,
+    meta?: Meta<{ pattern: RegExp }>,
+  ): Type<string, A>;
+};
+const primitive = (kind: Type | Primitive) => {
+  if (typeof kind !== "string") return kind;
   switch (kind) {
     case "uint":
     case "time":
@@ -171,10 +177,10 @@ const primitive = (kind: Primitive) => {
 /** Creates a vector type. */
 export const vec = <const A extends Type | Primitive>(
   kind: A,
-  meta?: { min?: number; max?: number; unique?: boolean },
+  meta?: Meta<{ unique: boolean }>,
 ): Type<As<A>[], A> => {
   const [a, b] = clamp([0, 0xfff], meta), c = meta?.unique;
-  const d: Type = typeof kind === "string" ? primitive(kind) : kind;
+  const d: Type = primitive(kind);
   return new Type(kind, ($, row) => {
     const e = parseInt($, 36);
     if (!$.trim() || $ !== e.toString(36) || e < 0) return flag("badInput");
@@ -202,17 +208,49 @@ export const vec = <const A extends Type | Primitive>(
     return $.length.toString(36);
   });
 };
+/** Creates a record type. */
+export const map = <const A extends Type | Primitive>(
+  kind: A,
+  meta?: Meta<{ key: RegExp }>,
+): Type<{ [key: string]: As<A> }, A> => {
+  const [a, b] = clamp([0, 0xfff], meta), c = meta?.key;
+  const d: Type = primitive(kind);
+  return new Type(kind, ($, row) => {
+    const e = parseInt($, 36);
+    if (!$.trim() || $ !== e.toString(36) || e < 0) return flag("badInput");
+    if (e < a) return flag("tooShort");
+    if (e > b) return flag("tooLong");
+    const f: { [key: string]: As<A> } = {}, g: Json[] = [];
+    for (let z = 0; z < e; ++z) {
+      const h = row.shift();
+      if (h == null) g[z] = "badInput";
+      else if (c?.test(h) === false) g[z] = "patternMismatch";
+      else {
+        const i = f[h] = d.parse(row);
+        if (typeof i === "symbol") g[z] = [h, open(i)];
+      }
+    }
+    if (g.length) {
+      for (let z = 0; z < e; ++z) g[z] ??= null;
+      return flag(g);
+    }
+    return f;
+  }, ($, row) => {
+    const e = Object.keys($);
+    for (let z = 0; z < e.length; ++z) {
+      row.push(e[z]), row.push.apply(row, d.stringify($[e[z]]));
+    }
+    return e.length.toString(36);
+  });
+};
 /** Creates an object type. */
 export const obj = <const A extends { [key: string]: Type | Primitive }>(
   kind: A,
-  meta?: { min?: number; max?: number },
+  meta?: Meta,
 ): Type<{ [B in keyof A]: As<A[B]> }, A> => {
   const [a, b] = clamp([0, 0xfff], meta), c = Object.keys(kind);
   const d: { [key: string]: Type } = {};
-  for (let z = 0; z < c.length; ++z) {
-    const e = kind[c[z]];
-    d[c[z]] = typeof e === "string" ? primitive(e) : e;
-  }
+  for (let z = 0; z < c.length; ++z) d[c[z]] = primitive(kind[c[z]]);
   return new Type(kind, ($, row) => {
     const e = parseInt($, 36);
     if (!$.trim() || $ !== e.toString(36) || e < 0) return flag("badInput");

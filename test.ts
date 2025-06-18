@@ -11,6 +11,7 @@ import {
   clamp,
   flag,
   Json,
+  map,
   normalize,
   num,
   obj,
@@ -92,7 +93,8 @@ Deno.test("nil", () =>
     num("uint").maybe(),
     str("pkey").really(),
     vec("time").maybe(),
-    obj({ char: "char" }),
+    map("real").really(),
+    obj({ char: "char" }).maybe(),
   ].forEach(($, z) =>
     type($, [z & 1 && [null]], [z & 1 ^ 1 && [[null], "valueMissing"]])
   ));
@@ -252,25 +254,25 @@ Deno.test("composite", async ($) => {
     min: fc.nat({ max: 0xfff }),
     max: fc.nat({ max: 0xfff }),
   });
+  const b = ["", " ", "00", "-1"].map<[Row, Json]>(($) => [[$], "badInput"]);
   await $.step("vec", () => {
-    const b = ($: number) => [
+    const c = ($: number) => [
       $.toString(36),
       ...Array.from({ length: $ }, () => "\0"),
     ];
-    type(
-      vec("char").maybe(),
-      [[null]],
-      ["", " ", "00", "-1"].map<[Row, Json]>(($) => [[$], "badInput"]),
-    );
+    type(vec("char").maybe(), [[null]], [
+      ...b,
+      [["1", "\0".repeat(256)], ["tooLong"]],
+    ]);
     fc.assert(
       fc.property(
         a,
         ($) => {
-          const [c, d] = clamp([0, 0xfff], $);
+          const [d, e] = clamp([0, 0xfff], $);
           type(
-            vec("char", { min: c, max: d }),
-            [b(c), b(d), c < d && b(c + 1), d > c && b(d - 1)],
-            [c && [b(c - 1), "tooShort"], [b(d + 1), "tooLong"]],
+            vec("char", { min: d, max: e }),
+            [c(d), c(e), d < e && c(d + 1), e > d && c(e - 1)],
+            [d && [c(d - 1), "tooShort"], [c(e + 1), "tooLong"]],
           );
         },
       ),
@@ -278,39 +280,62 @@ Deno.test("composite", async ($) => {
     );
     type(
       vec("char", { unique: true }),
-      [b(0), b(1)],
-      [[b(2), "typeMismatch"]],
+      [c(0), c(1)],
+      [[c(2), "typeMismatch"]],
     );
   });
-  await $.step("obj", () => {
-    const b = ($: number) => [
-      (0xfff).toString(36),
-      ...Array.from({ length: $ }, () => "\0"),
-      ...Array.from({ length: 0xfff - $ }, () => null),
+  await $.step("map", () => {
+    const c = ($: number) => [
+      $.toString(36),
+      ...Array.from({ length: $ }, (_, z) => [`${z}`, "\0"]).flat(),
     ];
-    type(
-      obj({ char: "char" }).maybe(),
-      [[null]],
-      [
-        ...["", " ", "00", "-1"].map<[Row, Json]>(($) => [[$], "badInput"]),
-        [["0"], "typeMismatch"],
-      ],
-    );
+    type(map("char", { key: /^\d$/ }).maybe(), [[null]], [
+      ...b,
+      [["1", null], ["badInput"]],
+      [["1", "a"], ["patternMismatch"]],
+      [["1", "0", "\0".repeat(256)], [["0", "tooLong"]]],
+    ]);
     fc.assert(
       fc.property(
         a,
         ($) => {
-          const [c, d] = clamp([0, 0xfff], $);
+          const [d, e] = clamp([0, 0xfff], $);
+          type(
+            map("char", { min: d, max: e }),
+            [c(d), c(e), d < e && c(d + 1), e > d && c(e - 1)],
+            [d && [c(d - 1), "tooShort"], [c(e + 1), "tooLong"]],
+          );
+        },
+      ),
+      { numRuns: 9 },
+    );
+  });
+  await $.step("obj", () => {
+    const c = ($: number) => [
+      (0xfff).toString(36),
+      ...Array.from({ length: $ }, () => "\0"),
+      ...Array.from({ length: 0xfff - $ }, () => null),
+    ];
+    type(obj({ char: "char" }).maybe(), [[null]], [
+      ...b,
+      [["0"], "typeMismatch"],
+      [["1", "\0".repeat(256)], { char: "tooLong" }],
+    ]);
+    fc.assert(
+      fc.property(
+        a,
+        ($) => {
+          const [d, e] = clamp([0, 0xfff], $);
           type(
             obj(
               Array.from({ length: 0xfff }, (_, z) => z).reduce(
                 (types, $) => ({ ...types, [$]: "char?" }),
                 {},
               ),
-              { min: c, max: d },
+              { min: d, max: e },
             ),
-            [b(c), b(d), c < d && b(c + 1), d > c && b(d - 1)],
-            [c && [b(c - 1), "tooShort"], d < 0xfff && [b(d + 1), "tooLong"]],
+            [c(d), c(e), d < e && c(d + 1), e > d && c(e - 1)],
+            [d && [c(d - 1), "tooShort"], e < 0xfff && [c(e + 1), "tooLong"]],
           );
         },
       ),
