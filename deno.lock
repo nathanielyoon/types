@@ -3,6 +3,7 @@
   "specifiers": {
     "jsr:@nyoon/base@^2.1.1": "2.1.1",
     "jsr:@nyoon/csv@^1.0.9": "1.0.9",
+    "jsr:@nyoon/x25519@^1.0.7": "1.0.7",
     "jsr:@std/assert@^1.0.13": "1.0.13",
     "jsr:@std/internal@^1.0.6": "1.0.8",
     "npm:fast-check@^4.1.1": "4.1.1"
@@ -13,6 +14,9 @@
     },
     "@nyoon/csv@1.0.9": {
       "integrity": "35ef391114e0f8da7cf7ba5ce11e2fb475af1af35854a99ba617cc35bf117ce5"
+    },
+    "@nyoon/x25519@1.0.7": {
+      "integrity": "47d166dc0c5b1b30503f36ebec64fbe70f270e97ed941ee07569612bfb38c1bd"
     },
     "@std/assert@1.0.13": {
       "integrity": "ae0d31e41919b12c656c742b22522c32fb26ed0cba32975cb0de2a273cb68b29",

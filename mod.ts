@@ -1,4 +1,4 @@
-import { s64_b } from "@nyoon/base";
+import { b_s64, s64_b } from "@nyoon/base";
 import { Row } from "jsr:@nyoon/csv@^1.0.9";
 
 /** Valid [JSON](https://www.json.org/) values, excluding `boolean`s. */
@@ -127,18 +127,21 @@ class Opt<A extends [string, ...string[]]> extends Type<A, A[number]> {
     return fix($);
   }
 }
-/** Type of key (public/secret). */
-export const KEY_HALF = Symbol("KEY_HALF");
-/** Key bytes. */
-export const KEY_DATA = Symbol("KEY_DATA");
 export type KeyString<A extends "pkey" | "skey"> = string & {
-  [KEY_HALF]: A;
-  [KEY_DATA]: Uint8Array;
+  [Key.KEY_HALF]: A;
+  [Key.KEY_DATA]: Uint8Array;
 };
-class Key<A extends "pkey" | "skey"> extends Type<A, KeyString<A>> {
+export class Key<A extends "pkey" | "skey"> extends Type<A, KeyString<A>> {
+  static make<A extends "pkey" | "skey">(kind: A, $: Uint8Array): KeyString<A> {
+    return Object.assign(b_s64($), { [Key.KEY_HALF]: kind, [Key.KEY_DATA]: $ });
+  }
+  /** Type of key (public/secret). */
+  static readonly KEY_HALF = Symbol("KEY_HALF");
+  /** Key's underlying bytes. */
+  static readonly KEY_DATA = Symbol("KEY_DATA");
   protected decode($: string): KeyString<A> | symbol {
     if (!/^[-\w]{43}$/.test($)) return wrap("badInput");
-    return Object.assign($, { [KEY_HALF]: this.kind, [KEY_DATA]: s64_b($) });
+    return Key.make(this.kind, s64_b($));
   }
   protected encode($: KeyString<A>): string {
     return /^[-\w]{43}$/.exec($)?.[0] ?? "A".repeat(43);
@@ -174,7 +177,7 @@ class Iso<A extends "time" | "date"> extends Primitive<A, Date> {
     this.prefix = kind === "time" ? "1970-01-01T" : "";
   }
   protected decode($: string): Date | symbol {
-    const a = new Date(this.prefix + $), b = +a;
+    const a = new Date(`${this.prefix}${$}Z`), b = +a;
     if (Number.isNaN(b) || !$.trim()) return wrap("badInput");
     if (b < this.min) return wrap("rangeUnderflow");
     if (b > this.max) return wrap("rangeOverflow");
@@ -329,25 +332,3 @@ class Obj<A extends { [key: string]: Type<{}, any> }>
     return this.keys.length.toString(36);
   }
 }
-
-const a = Type.obj({
-  a: Type.opt([""]),
-  b: Type.key("pkey"),
-  c: Type.key("skey"),
-  d: Type.iso("time"),
-  e: Type.iso("date"),
-  f: Type.num("uint"),
-  g: Type.num("real"),
-});
-const b = Type.obj({
-  h: Type.str("char").maybe(),
-  i: Type.str("text"),
-  j: Type.vec(Type.num("uint")),
-  k: Type.map(Type.iso("time")),
-  l: Type.obj({ char: Type.str("char") }),
-});
-const c = Type.obj({
-  ...b.kind,
-  ...a.kind,
-});
-type C = As<typeof c>;
