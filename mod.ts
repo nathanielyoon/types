@@ -219,7 +219,9 @@ export const vec = <const A extends Type>(
 /** Creates a map type. */
 export const map = <const A extends Type>(
   kind: A,
-  meta?: Meta<{ unique: boolean; keys: Type<any, string> }>,
+  meta?: Meta<
+    { unique: boolean; keys: Type<any, string | Key<"pkey" | "skey">> }
+  >,
 ): Type<A, { [key: string]: As<A> }> => {
   const a = length(range("vec", meta)), b = meta?.keys ?? str("char");
   const c = result(meta);
