@@ -217,11 +217,12 @@ export const vec = <const A extends Type>(
   });
 };
 /** Creates a map type. */
-export const map = <const A extends Type>(
+export const map = <
+  const A extends Type,
+  const B extends string | Key<"pkey" | "skey"> = string,
+>(
   kind: A,
-  meta?: Meta<
-    { unique: boolean; keys: Type<any, string | Key<"pkey" | "skey">> }
-  >,
+  meta?: Meta<{ unique: boolean; keys: Type<any, B> }>,
 ): Type<A, { [key: string]: As<A> }> => {
   const a = length(range("vec", meta)), b = meta?.keys ?? str("char");
   const c = result(meta);
@@ -241,7 +242,7 @@ export const map = <const A extends Type>(
   }, ($, row) => {
     const c = Object.keys($);
     for (let z = 0; z < c.length; ++z) {
-      row.push.apply(row, b.encode(c[z]));
+      row.push.apply(row, b.encode(c[z] as B));
       row.push.apply(row, kind.encode($[c[z]]));
     }
     return c.length.toString(36);
