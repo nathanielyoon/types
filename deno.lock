@@ -3,6 +3,7 @@
   "specifiers": {
     "jsr:@nyoon/base@^2.1.1": "2.1.1",
     "jsr:@nyoon/csv@^1.0.9": "1.0.9",
+    "jsr:@nyoon/schema@1": "1.0.0",
     "jsr:@nyoon/x25519@^1.0.7": "1.0.7",
     "jsr:@std/assert@^1.0.13": "1.0.13",
     "jsr:@std/internal@^1.0.6": "1.0.8",
@@ -14,6 +15,12 @@
     },
     "@nyoon/csv@1.0.9": {
       "integrity": "35ef391114e0f8da7cf7ba5ce11e2fb475af1af35854a99ba617cc35bf117ce5"
+    },
+    "@nyoon/schema@1.0.0": {
+      "integrity": "adb7f5811954e5dfd51785611abcfbfb6f58b710da9b3971da959f3b09c188aa",
+      "dependencies": [
+        "jsr:@nyoon/base"
+      ]
     },
     "@nyoon/x25519@1.0.7": {
       "integrity": "47d166dc0c5b1b30503f36ebec64fbe70f270e97ed941ee07569612bfb38c1bd"

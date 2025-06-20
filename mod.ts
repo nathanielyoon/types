@@ -1,16 +1,16 @@
 import { b_s64, s64_b } from "@nyoon/base";
 import { Row } from "jsr:@nyoon/csv@^1.0.9";
+import { Word } from "jsr:@nyoon/schema@^1.0.0";
 
 /** Valid [JSON](https://www.json.org/) values, excluding `boolean`s. */
-export type Json = null | number | string | Json[] | { [key: string]: Json };
+export type Json = null | number | string | Json[] | { [_: string]: Json };
 /** Wraps an error or errors in a `symbol`. */
 export const wrap = ($: Json): symbol => Symbol.for(JSON.stringify($));
 /** Unwraps the error or error held in a `symbol`. */
 export const open = <A extends Json>($: symbol): A =>
   JSON.parse(Symbol.keyFor($) ?? "null");
-type Meta<A> = A extends { new (_: any, meta: infer B): any } ? B : never;
 /** Type for parsing and stringifying variable-length data. */
-export abstract class Type<A = {}, B = any> {
+export class Type<A = {}, B = any> {
   private nil: B | symbol = wrap("valueMissing");
   /** Makes a `Type` optional. */
   maybe(): Type<A, B | null> {
@@ -20,17 +20,17 @@ export abstract class Type<A = {}, B = any> {
   really(): Type<A, NonNullable<B>> {
     return this.nil = wrap("valueMissing"), this as Type<A, NonNullable<B>>;
   }
-  /** Parses the specified type from a string. */
-  protected abstract decode($: string, row: Row): NonNullable<B> | symbol;
-  /** Stringifies the specified type. */
-  protected abstract encode($: NonNullable<B>, row: Row): string;
   /** Creates a type for parsing and stringifying CSV data. */
-  constructor(public kind: A) {}
+  constructor(
+    public kind: A,
+    private parse: ($: string, row: Row) => NonNullable<B> | symbol,
+    private stringify: ($: NonNullable<B>, row: Row) => string,
+  ) {}
   private hooks = {
-    pre_parse: (() => {}) as ($: Row) => any,
-    post_parse: (($) => $) as ($: B) => B | symbol,
-    pre_stringify: (($) => $) as ($: B) => B,
-    post_stringify: (() => {}) as ($: Row) => void,
+    decode_0: (() => {}) as ($: Row) => any,
+    decode_1: (($) => $) as ($: B) => B | symbol,
+    encode_0: (($) => $) as ($: B) => B,
+    encode_1: (() => {}) as ($: Row) => void,
   };
   /** Hooks into one of the steps. */
   on<A extends keyof typeof this.hooks>(on: A, to: typeof this.hooks[A]): this {
@@ -42,118 +42,74 @@ export abstract class Type<A = {}, B = any> {
     return this;
   }
   /** Converts a CSV row to the specified type or a `symbol` (error). */
-  parse($: Row): B | symbol {
-    const a = this.hooks.pre_parse($);
+  decode($: Row): B | symbol {
+    const a = this.hooks.decode_0($);
     if (typeof a === "symbol") return a;
     const b = $.shift();
     if (b == null) return this.nil;
-    const c = this.decode(b, $);
+    const c = this.parse(b, $);
     if (typeof c === "symbol") return c;
-    return this.hooks.post_parse(c);
+    return this.hooks.decode_1(c);
   }
   /** Converts the specified type to a CSV row (or portion thereof). */
-  stringify($: B): Row {
+  encode($: B): Row {
     const a: Row = [];
-    $ = this.hooks.pre_stringify($);
+    $ = this.hooks.encode_0($);
     if ($ == null) a.push(null);
-    else a.unshift(this.encode($, a));
-    return this.hooks.post_stringify(a), a;
-  }
-  /** Creates an option type. */
-  static opt<const A extends [string, ...string[]]>(kind: A): Opt<A> {
-    return new Opt(kind);
-  }
-  /** Creates a public or secret key type. */
-  static key<const A extends "pkey" | "skey">(kind: A): Key<A> {
-    return new Key(kind);
-  }
-  /** Creates a datetime type. */
-  static iso<const A extends "time" | "date">(
-    kind: A,
-    meta?: Meta<typeof Iso>,
-  ): Iso<A> {
-    return new Iso(kind, meta ?? {});
-  }
-  /** Creates a number type. */
-  static num<const A extends "uint" | "real">(
-    kind: A,
-    meta?: Meta<typeof Num>,
-  ): Num<A> {
-    return new Num(kind, meta ?? {});
-  }
-  /** Creates a string type. */
-  static str<const A extends "char" | "text">(
-    kind: A,
-    meta?: Meta<typeof Str>,
-  ): Str<A> {
-    return new Str(kind, meta ?? {});
-  }
-  /** Creates a vector type. */
-  static vec<const A extends Type<{}, any>>(
-    kind: A,
-    meta?: Meta<typeof Vec>,
-  ): Vec<A> {
-    return new Vec(kind, meta ?? {});
-  }
-  /** Creates a map type. */
-  static map<const A extends Type<{}, any>>(
-    kind: A,
-    meta?: Meta<typeof Map>,
-  ): Map<A> {
-    return new Map(kind, meta ?? {});
-  }
-  /** Creates an object type. */
-  static obj<const A extends { [key: string]: Type<{}, any> }>(
-    kind: A,
-  ): Obj<A> {
-    return new Obj(kind);
+    else a.unshift(this.stringify($, a));
+    return this.hooks.encode_1(a), a;
   }
 }
+type All<A> = A extends number | string | Date ? A : { [B in keyof A]: A[B] };
 /** Parsed data. */
-export type As<A> = A extends Type<any, infer B> ? B : never;
+export type As<A> = A extends Type<any, infer B> ? All<B> : never;
 /** Canonicalizes, replaces lone surrogates, and standardizes whitespace. */
 export const fix = ($: string): string =>
   $.normalize("NFC").replace(/\p{Cs}/gu, "\ufffd")
     .replace(/\r\n|\p{Zl}|\p{Zp}/gu, "\n").replace(/\p{Zs}/gu, " ");
-class Opt<A extends [string, ...string[]]> extends Type<A, A[number]> {
-  private readonly has;
-  constructor(kind: A) {
-    super(kind);
-    this.has = Set.prototype.has.bind(new Set(kind));
-  }
-  protected decode($: string): A[number] | symbol {
-    if (!this.has($ = fix($))) return wrap("badInput");
-    return $ as A[number];
-  }
-  protected encode($: A[number]): string {
-    return fix($);
+class Flag<A extends Word> {
+  constructor(public bits: number) {}
+  has($: A) {
+    return (this.bits >>> $ & 1) as 0 | 1;
   }
 }
-/** Key as a base64url string with some extra properties. */
-export type KeyString<A extends "pkey" | "skey"> = string & {
-  [Key.KEY_HALF]: A;
-  [Key.KEY_DATA]: Uint8Array;
+/** Creates an option type. */
+export const opt = ((kind: [string, ...string[]] | [Word, ...Word[]]) => {
+  if (typeof kind[0] === "string") {
+    const a = Set.prototype.has.bind(new Set(kind));
+    return new Type(kind, ($) => a($ = fix($)) ? $ : wrap("badInput"), fix);
+  }
+  let a = 0;
+  for (let z = 0; z < kind.length; ++z) a |= 1 << kind[z];
+  return new Type(kind, ($) => {
+    const b = parseInt($, 16);
+    if (Number.isNaN(b) || $ !== b.toString(16)) return wrap("badInput");
+    if (b !== (b & a)) return wrap("typeMismatch");
+    return new Flag(b);
+  }, ($) => $.bits.toString(16));
+}) as {
+  <A extends [string, ...string[]]>(kind: A): Type<A, A[number]>;
+  <A extends [Word, ...Word[]]>(kind: A): Type<A, Flag<A[number]>>;
 };
-/** Key type. */
-export class Key<A extends "pkey" | "skey"> extends Type<A, KeyString<A>> {
-  /** Symbol for a key's type (public/secret). */
-  static readonly KEY_HALF = Symbol("KEY_HALF");
-  /** Symbol for a key's underlying bytes. */
-  static readonly KEY_DATA = Symbol("KEY_DATA");
-  /** Creates a new `KeyString` from the underlying bytes. */
-  static make<A extends "pkey" | "skey">(kind: A, $: Uint8Array): KeyString<A> {
-    return Object.assign(b_s64($), { [Key.KEY_HALF]: kind, [Key.KEY_DATA]: $ });
-  }
-  /** Parses a `KeyString` from a string. */
-  protected decode($: string): KeyString<A> | symbol {
-    if (!/^[-\w]{43}$/.test($)) return wrap("badInput");
-    return Key.make(this.kind, s64_b($));
-  }
-  /** Stringifies a `KeyString` (empty if invalid). */
-  protected encode($: KeyString<A>): string {
-    return /^[-\w]{43}$/.exec($)?.[0] ?? "A".repeat(43);
-  }
-}
+/** Symbol for a key's type (public/secret). */
+export const KEY_HALF = Symbol("KEY_HALF");
+/** Symbol for a key's underlying bytes. */
+export const KEY_DATA = Symbol("KEY_DATA");
+/** Key as a base64url string with some extra properties. */
+export type Key<A extends "pkey" | "skey"> = string & {
+  [KEY_HALF]: A;
+  [KEY_DATA]: Uint8Array;
+};
+/** Creates a new `Key` from binary data. */
+export const make = <A extends "pkey" | "skey">(as: A, $: Uint8Array): Key<A> =>
+  Object.assign(b_s64($), { [KEY_HALF]: as, [KEY_DATA]: $ });
+/** Creates a key type. */
+export const key = <A extends "pkey" | "skey">(kind: A) =>
+  new Type(
+    kind,
+    ($) => /^[-\w]{43}$/.test($) ? make(kind, s64_b($)) : wrap("badInput"),
+    ($) => /^[-\w]{43}$/.exec($)?.[0] ?? "A".repeat(43),
+  );
 /** Numeric or length ranges. */
 export const RANGE = {
   uint: [0, 0xffffffff],
@@ -162,74 +118,54 @@ export const RANGE = {
   date: [0, 281474976710655],
   char: [0, 0xff],
   text: [0, 0xffff],
+  vec: [0, 0xfff],
+  map: [0, 0xfff],
 } as const;
-type MinMax<A> = {
-  [B in keyof A | "min" | "max"]?: B extends keyof A ? A[B] : number;
+type Meta<A = {}> = All<Partial<{ min: number; max: number } & A>>;
+const range = (kind: keyof typeof RANGE, meta?: Meta) => {
+  const [a, b] = RANGE[kind];
+  const c = Math.max(meta?.min ?? a, a), d = Math.min(meta?.max ?? b, b);
+  return [Math.max(a, Math.min(c, d)), Math.min(b, Math.max(c, d))] as const;
 };
-const min = (min_min: number, $?: number) => Math.max(min_min, $ ?? min_min);
-const max = (max_max: number, $?: number) => Math.min(max_max, $ ?? max_max);
-abstract class Primitive<A extends keyof typeof RANGE, B> extends Type<A, B> {
-  protected readonly min: number;
-  protected readonly max: number;
-  constructor(kind: A, meta: MinMax<{}>) {
-    super(kind);
-    const [a, b] = RANGE[kind], c = min(a, meta?.min), d = max(b, meta?.max);
-    this.min = min(a, Math.min(c, d)), this.max = max(b, Math.max(c, d));
-  }
-}
-class Iso<A extends "time" | "date"> extends Primitive<A, Date> {
-  private readonly prefix;
-  constructor(kind: A, meta: MinMax<{}>) {
-    super(kind, meta);
-    this.prefix = kind === "time" ? "1970-01-01T" : "";
-  }
-  protected decode($: string): Date | symbol {
-    const a = new Date(`${this.prefix}${$}Z`), b = +a;
-    if (Number.isNaN(b) || !$.trim()) return wrap("badInput");
-    if (b < this.min) return wrap("rangeUnderflow");
-    if (b > this.max) return wrap("rangeOverflow");
-    return a;
-  }
-  protected encode($: Date): string {
-    return $.toISOString().slice(0, -1).replace(this.prefix, "");
-  }
-}
-class Num<A extends "uint" | "real"> extends Primitive<A, number> {
-  private readonly step;
-  constructor(kind: A, meta: MinMax<{ step: number }>) {
-    super(kind, meta);
-    this.step = meta.step ?? 0;
-  }
-  protected decode($: string): number | symbol {
-    const a = +$;
-    if (Number.isNaN(a) || !$.trim()) return wrap("badInput");
-    if (a < this.min) return wrap("rangeUnderflow");
-    if (a > this.max) return wrap("rangeOverflow");
-    if (a % this.step) return wrap("stepMismatch");
-    return a;
-  }
-  protected encode($: number): string {
-    return `${$}`;
-  }
-}
-class Str<A extends "char" | "text"> extends Primitive<A, string> {
-  private readonly test;
-  constructor(kind: A, meta: MinMax<{ pattern: RegExp }>) {
-    super(kind, meta);
-    if (meta.pattern) this.test = RegExp.prototype.test.bind(meta?.pattern);
-  }
-  protected decode($: string): string | symbol {
+/** Creates an ISO datetime type. */
+export const iso = <const A extends "time" | "date">(kind: A, meta?: Meta) => {
+  const [a, b] = range(kind, meta), c = kind === "time" ? "1970-01-01T" : "";
+  return new Type(kind, ($) => {
+    const d = new Date(`${c}${$}Z`), e = +d;
+    if (Number.isNaN(e)) return wrap("badInput");
+    if (e < a) return wrap("rangeUnderflow");
+    if (e > b) return wrap("rangeOverflow");
+    return d;
+  }, ($) => $.toISOString().slice(0, -1).replace(c, ""));
+};
+/** Creates a number type. */
+export const num = <
+  const A extends "uint" | "real",
+>(kind: A, meta?: Meta<{ step: number }>) => {
+  const [a, b] = range(kind, meta), c = meta?.step ?? 0;
+  return new Type(kind, ($) => {
+    const d = +$;
+    if (Number.isNaN($) || !$.trim()) return wrap("badInput");
+    if (d < a) return wrap("rangeUnderflow");
+    if (d > b) return wrap("rangeOverflow");
+    if (d % c) return wrap("stepMismatch");
+    return d;
+  }, String);
+};
+/** Creates a string type. */
+export const str = <
+  const A extends "char" | "text",
+>(kind: A, meta?: Meta<{ pattern: RegExp }>) => {
+  const [a, b] = range(kind, meta), c = meta?.pattern?.test.bind(meta.pattern);
+  return new Type(kind, ($) => {
     $ = fix($);
-    if ($.length < this.min) return wrap("tooShort");
-    if ($.length > this.max) return wrap("tooLong");
-    if (this.test?.($) === false) return wrap("patternMismatch");
+    if ($.length < a) return wrap("tooShort");
+    if ($.length > b) return wrap("tooLong");
+    if (c?.($) === false) return wrap("patternMismatch");
     return $;
-  }
-  protected encode($: string): string {
-    return fix($);
-  }
-}
-const length = ($: string, min: number, max: number) => {
+  }, fix);
+};
+const length = ([min, max]: readonly [number, number]) => ($: string) => {
   if (!$.trim()) return wrap("badInput");
   const a = parseInt($, 36);
   if ($ !== a.toString(36) || a < 0) return wrap("badInput");
@@ -237,109 +173,87 @@ const length = ($: string, min: number, max: number) => {
   if (a > max) return wrap("tooLong");
   return a;
 };
-abstract class List<A, B> extends Type<A, B> {
-  protected readonly min: number;
-  protected readonly max: number;
-  protected readonly unique: boolean;
-  constructor(kind: A, meta: MinMax<{ unique: boolean }>) {
-    super(kind);
-    const a = min(0, meta.min), b = max(0xfff, meta.max);
-    this.min = min(0, Math.min(a, b)), this.max = max(0xfff, Math.max(a, b));
-    this.unique = meta.unique || false;
-  }
-  protected result<C extends {}>(size: number, ok: C, no: Json[]): C | symbol {
+const result =
+  (meta?: { unique?: boolean }) =>
+  <A extends {}>(size: number, ok: A, no: Json[]) => {
     if (no.length) {
       for (let z = 0; z < size; ++z) no[z] ??= null;
       return wrap(no);
     }
-    if (this.unique) {
-      for (let z = 0, a = Object.values(ok), b = new Set(); z < a.length; ++z) {
+    if (meta?.unique) {
+      const a = Object.values(ok), b = new Set<string>();
+      for (let z = 0; z < size; ++z) {
         if (b.size === b.add(JSON.stringify(a[z])).size) {
           return wrap("typeMismatch");
         }
       }
     }
     return ok;
-  }
-}
-class Vec<A extends Type<{}, any>> extends List<A, As<A>[]> {
-  constructor($: A, meta: MinMax<{ unique: boolean }>) {
-    super($, meta);
-  }
-  protected decode($: string, row: Row): As<A>[] | symbol {
-    const a = length($, this.min, this.max);
-    if (typeof a === "symbol") return a;
-    const b = Array(a), c: Json[] = [];
-    for (let z = 0; z < a; ++z) {
-      if (typeof (b[z] = this.kind.parse(row)) === "symbol") c[z] = open(b[z]);
+  };
+/** Creates a vector type. */
+export const vec = <
+  const A extends Type,
+>(kind: A, meta?: Meta<{ unique: boolean }>) => {
+  const a = length(range("vec", meta)), b = result(meta);
+  return new Type(kind, ($, row) => {
+    const c = a($);
+    if (typeof c === "symbol") return c;
+    const d = Array<As<A>>(c), e: Json[] = [];
+    for (let z = 0; z < c; ++z) {
+      if (typeof (d[z] = kind.decode(row)) === "symbol") e[z] = open(d[z]);
     }
-    return this.result(a, b as As<A>[], c);
-  }
-  protected encode($: As<A>[], row: Row): string {
-    for (let z = 0; z < $.length; ++z) {
-      row.push.apply(row, this.kind.stringify($[z]));
-    }
+    return b(c, d, e);
+  }, ($, row) => {
+    for (let z = 0; z < $.length; ++z) row.push.apply(row, kind.encode($[z]));
     return $.length.toString(36);
-  }
-}
-class Map<A extends Type<{}, any>> extends List<A, { [key: string]: As<A> }> {
-  /** Type of each field's key. */
-  readonly keys: Type<any, string>;
-  constructor(
-    kind: A,
-    meta: MinMax<{ unique: boolean; keys: Type<any, string> }>,
-  ) {
-    super(kind, meta);
-    this.keys = (meta.keys ?? new Str("char", {})).really();
-  }
-  protected decode($: string, row: Row): { [key: string]: As<A> } | symbol {
-    const a = length($, this.min, this.max);
-    if (typeof a === "symbol") return a;
-    const b: { [key: string]: As<A> } = {}, c: Json[] = [];
-    for (let z = 0; z < a; ++z) {
-      const d = this.keys.parse(row);
-      if (typeof d === "symbol") c[z] = open(d);
-      else if (d in b) c[z] = "typeMismatch";
-      else if (typeof (b[d] = this.kind.parse(row)) === "symbol") {
-        c[z] = [d, open(b[d])];
+  });
+};
+/** Creates a map type. */
+export const map = <
+  const A extends Type,
+>(kind: A, meta?: Meta<{ unique: boolean; keys: Type<any, string> }>) => {
+  const a = length(range("vec", meta)), b = meta?.keys ?? str("char");
+  const c = result(meta);
+  return new Type(kind, ($, row) => {
+    const d = a($);
+    if (typeof d === "symbol") return d;
+    const e: { [_: string]: As<A> } = {}, f: Json[] = [];
+    for (let z = 0; z < d; ++z) {
+      const g = b.decode(row);
+      if (typeof g === "symbol") f[z] = open(g);
+      else if (g in e) f[z] = "typeMismatch";
+      else if (typeof (e[g] = kind.decode(row)) === "symbol") {
+        f[z] = [g, open(e[g])];
       }
     }
-    return this.result(a, b, c);
-  }
-  protected encode($: { [key: string]: As<A> }, row: Row): string {
-    const a = Object.keys($);
+    return c(d, e, f);
+  }, ($, row) => {
+    const c = Object.keys($);
+    for (let z = 0; z < c.length; ++z) {
+      row.push.apply(row, b.encode(c[z]));
+      row.push.apply(row, kind.encode($[c[z]]));
+    }
+    return c.length.toString(36);
+  });
+};
+/** Creates an object type. */
+export const obj = <const A extends { [_: string]: Type }>(kind: A) => {
+  const a = Object.keys(kind), b = length([a.length, a.length]);
+  return new Type(kind, ($, row) => {
+    const c = b($);
+    if (typeof c === "symbol") return c;
+    const d = {} as { [B in keyof A]: As<A[B]> }, e: { [_: string]: Json } = {};
     for (let z = 0; z < a.length; ++z) {
-      row.push.apply(row, this.keys.stringify(a[z]));
-      row.push.apply(row, this.kind.stringify($[a[z]]));
+      if (typeof (d[a[z] as keyof A] = kind[a[z]].decode(row)) === "symbol") {
+        e[a[z]] = open(d[a[z]]);
+      }
+    }
+    if (Object.keys(e).length) return wrap(e);
+    return d;
+  }, ($, row) => {
+    for (let z = 0; z < a.length; ++z) {
+      row.push.apply(row, kind[a[z]].encode($[a[z]]));
     }
     return a.length.toString(36);
-  }
-}
-class Obj<A extends { [key: string]: Type<{}, any> }>
-  extends Type<A, { [B in keyof A]: As<A[B]> }> {
-  /** List of field keys. */
-  readonly keys: (keyof A & string)[];
-  constructor(kind: A) {
-    super(kind);
-    this.keys = Object.keys(kind) as (keyof A & string)[];
-  }
-  protected decode($: string, row: Row): { [B in keyof A]: As<A[B]> } | symbol {
-    const a = length($, this.keys.length, this.keys.length);
-    if (typeof a === "symbol") return a;
-    const b = {} as { [B in keyof A]: As<A[B]> };
-    const c: { [key: string]: Json } = {};
-    for (let z = 0, d: keyof A & string; z < a; ++z) {
-      if (typeof (b[d = this.keys[z]] = this.kind[d].parse(row)) === "symbol") {
-        c[d] = open(b[d]);
-      }
-    }
-    if (Object.keys(c).length) return wrap(c);
-    return b;
-  }
-  protected encode($: { [B in keyof A]: As<A[B]> }, row: Row): string {
-    for (let z = 0; z < this.keys.length; ++z) {
-      row.push.apply(row, this.kind[this.keys[z]].stringify($[this.keys[z]]));
-    }
-    return this.keys.length.toString(36);
-  }
-}
+  });
+};
