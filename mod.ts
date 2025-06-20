@@ -10,7 +10,7 @@ export const open = <A extends Json>($: symbol): A =>
   JSON.parse(Symbol.keyFor($) ?? "null");
 type Meta<A> = A extends { new (_: any, meta: infer B): any } ? B : never;
 /** Type for parsing and stringifying variable-length data. */
-export abstract class Type<A, B> {
+export abstract class Type<A = {}, B = any> {
   private nil: B | symbol = wrap("valueMissing");
   /** Makes a `Type` optional. */
   maybe(): Type<A, B | null> {
