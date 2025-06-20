@@ -116,7 +116,7 @@ export const fix = ($: string): string =>
   $.normalize("NFC").replace(/\p{Cs}/gu, "\ufffd")
     .replace(/\r\n|\p{Zl}|\p{Zp}/gu, "\n").replace(/\p{Zs}/gu, " ");
 class Opt<A extends [string, ...string[]]> extends Type<A, A[number]> {
-  private has;
+  private readonly has;
   constructor(kind: A) {
     super(kind);
     this.has = Set.prototype.has.bind(new Set(kind));
@@ -136,14 +136,14 @@ export type KeyString<A extends "pkey" | "skey"> = string & {
 };
 /** Key type. */
 export class Key<A extends "pkey" | "skey"> extends Type<A, KeyString<A>> {
-  /** Creates a new `KeyString` from the underlying bytes. */
-  static make<A extends "pkey" | "skey">(kind: A, $: Uint8Array): KeyString<A> {
-    return Object.assign(b_s64($), { [Key.KEY_HALF]: kind, [Key.KEY_DATA]: $ });
-  }
   /** Symbol for a key's type (public/secret). */
   static readonly KEY_HALF = Symbol("KEY_HALF");
   /** Symbol for a key's underlying bytes. */
   static readonly KEY_DATA = Symbol("KEY_DATA");
+  /** Creates a new `KeyString` from the underlying bytes. */
+  static make<A extends "pkey" | "skey">(kind: A, $: Uint8Array): KeyString<A> {
+    return Object.assign(b_s64($), { [Key.KEY_HALF]: kind, [Key.KEY_DATA]: $ });
+  }
   /** Parses a `KeyString` from a string. */
   protected decode($: string): KeyString<A> | symbol {
     if (!/^[-\w]{43}$/.test($)) return wrap("badInput");
@@ -169,8 +169,8 @@ type MinMax<A> = {
 const min = (min_min: number, $?: number) => Math.max(min_min, $ ?? min_min);
 const max = (max_max: number, $?: number) => Math.min(max_max, $ ?? max_max);
 abstract class Primitive<A extends keyof typeof RANGE, B> extends Type<A, B> {
-  protected min: number;
-  protected max: number;
+  protected readonly min: number;
+  protected readonly max: number;
   constructor(kind: A, meta: MinMax<{}>) {
     super(kind);
     const [a, b] = RANGE[kind], c = min(a, meta?.min), d = max(b, meta?.max);
@@ -178,7 +178,7 @@ abstract class Primitive<A extends keyof typeof RANGE, B> extends Type<A, B> {
   }
 }
 class Iso<A extends "time" | "date"> extends Primitive<A, Date> {
-  private prefix;
+  private readonly prefix;
   constructor(kind: A, meta: MinMax<{}>) {
     super(kind, meta);
     this.prefix = kind === "time" ? "1970-01-01T" : "";
@@ -195,7 +195,7 @@ class Iso<A extends "time" | "date"> extends Primitive<A, Date> {
   }
 }
 class Num<A extends "uint" | "real"> extends Primitive<A, number> {
-  private step;
+  private readonly step;
   constructor(kind: A, meta: MinMax<{ step: number }>) {
     super(kind, meta);
     this.step = meta.step ?? 0;
@@ -213,7 +213,7 @@ class Num<A extends "uint" | "real"> extends Primitive<A, number> {
   }
 }
 class Str<A extends "char" | "text"> extends Primitive<A, string> {
-  private test;
+  private readonly test;
   constructor(kind: A, meta: MinMax<{ pattern: RegExp }>) {
     super(kind, meta);
     if (meta.pattern) this.test = RegExp.prototype.test.bind(meta?.pattern);
@@ -238,9 +238,9 @@ const length = ($: string, min: number, max: number) => {
   return a;
 };
 abstract class List<A, B> extends Type<A, B> {
-  protected min: number;
-  protected max: number;
-  protected unique: boolean;
+  protected readonly min: number;
+  protected readonly max: number;
+  protected readonly unique: boolean;
   constructor(kind: A, meta: MinMax<{ unique: boolean }>) {
     super(kind);
     const a = min(0, meta.min), b = max(0xfff, meta.max);
@@ -285,7 +285,10 @@ class Vec<A extends Type<{}, any>> extends List<A, As<A>[]> {
 class Map<A extends Type<{}, any>> extends List<A, { [key: string]: As<A> }> {
   /** Type of each field's key. */
   readonly keys: Type<any, string>;
-  constructor(kind: A, meta: MinMax<{ unique: boolean; keys: Str<"char"> }>) {
+  constructor(
+    kind: A,
+    meta: MinMax<{ unique: boolean; keys: Type<any, string> }>,
+  ) {
     super(kind, meta);
     this.keys = (meta.keys ?? new Str("char", {})).really();
   }
@@ -306,7 +309,8 @@ class Map<A extends Type<{}, any>> extends List<A, { [key: string]: As<A> }> {
   protected encode($: { [key: string]: As<A> }, row: Row): string {
     const a = Object.keys($);
     for (let z = 0; z < a.length; ++z) {
-      row.push(a[z]), row.push.apply(row, this.kind.stringify($[a[z]]));
+      row.push.apply(row, this.keys.stringify(a[z]));
+      row.push.apply(row, this.kind.stringify($[a[z]]));
     }
     return a.length.toString(36);
   }
