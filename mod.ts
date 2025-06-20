@@ -68,8 +68,10 @@ export const fix = ($: string): string =>
   $.normalize("NFC").replace(/\p{Cs}/gu, "\ufffd")
     .replace(/\r\n|\p{Zl}|\p{Zp}/gu, "\n").replace(/\p{Zs}/gu, " ");
 class Flag<A extends Word> {
+  /** Creates a getter for the set bits. */
   constructor(public bits: number) {}
-  has($: A) {
+  /** Checks if a bit is set. */
+  has($: A): 0 | 1 {
     return (this.bits >>> $ & 1) as 0 | 1;
   }
 }
@@ -104,7 +106,7 @@ export type Key<A extends "pkey" | "skey"> = string & {
 export const make = <A extends "pkey" | "skey">(as: A, $: Uint8Array): Key<A> =>
   Object.assign(b_s64($), { [KEY_HALF]: as, [KEY_DATA]: $ });
 /** Creates a key type. */
-export const key = <A extends "pkey" | "skey">(kind: A) =>
+export const key = <A extends "pkey" | "skey">(kind: A): Type<A, Key<A>> =>
   new Type(
     kind,
     ($) => /^[-\w]{43}$/.test($) ? make(kind, s64_b($)) : wrap("badInput"),
@@ -128,7 +130,10 @@ const range = (kind: keyof typeof RANGE, meta?: Meta) => {
   return [Math.max(a, Math.min(c, d)), Math.min(b, Math.max(c, d))] as const;
 };
 /** Creates an ISO datetime type. */
-export const iso = <const A extends "time" | "date">(kind: A, meta?: Meta) => {
+export const iso = <const A extends "time" | "date">(
+  kind: A,
+  meta?: Meta,
+): Type<A, Date> => {
   const [a, b] = range(kind, meta), c = kind === "time" ? "1970-01-01T" : "";
   return new Type(kind, ($) => {
     const d = new Date(`${c}${$}Z`), e = +d;
@@ -139,9 +144,10 @@ export const iso = <const A extends "time" | "date">(kind: A, meta?: Meta) => {
   }, ($) => $.toISOString().slice(0, -1).replace(c, ""));
 };
 /** Creates a number type. */
-export const num = <
-  const A extends "uint" | "real",
->(kind: A, meta?: Meta<{ step: number }>) => {
+export const num = <const A extends "uint" | "real">(
+  kind: A,
+  meta?: Meta<{ step: number }>,
+): Type<A, number> => {
   const [a, b] = range(kind, meta), c = meta?.step ?? 0;
   return new Type(kind, ($) => {
     const d = +$;
@@ -153,9 +159,10 @@ export const num = <
   }, String);
 };
 /** Creates a string type. */
-export const str = <
-  const A extends "char" | "text",
->(kind: A, meta?: Meta<{ pattern: RegExp }>) => {
+export const str = <const A extends "char" | "text">(
+  kind: A,
+  meta?: Meta<{ pattern: RegExp }>,
+): Type<A, string> => {
   const [a, b] = range(kind, meta), c = meta?.pattern?.test.bind(meta.pattern);
   return new Type(kind, ($) => {
     $ = fix($);
@@ -191,9 +198,10 @@ const result =
     return ok;
   };
 /** Creates a vector type. */
-export const vec = <
-  const A extends Type,
->(kind: A, meta?: Meta<{ unique: boolean }>) => {
+export const vec = <const A extends Type>(
+  kind: A,
+  meta?: Meta<{ unique: boolean }>,
+): Type<A, As<A>[]> => {
   const a = length(range("vec", meta)), b = result(meta);
   return new Type(kind, ($, row) => {
     const c = a($);
@@ -209,9 +217,10 @@ export const vec = <
   });
 };
 /** Creates a map type. */
-export const map = <
-  const A extends Type,
->(kind: A, meta?: Meta<{ unique: boolean; keys: Type<any, string> }>) => {
+export const map = <const A extends Type>(
+  kind: A,
+  meta?: Meta<{ unique: boolean; keys: Type<any, string> }>,
+): Type<A, { [key: string]: As<A> }> => {
   const a = length(range("vec", meta)), b = meta?.keys ?? str("char");
   const c = result(meta);
   return new Type(kind, ($, row) => {
@@ -237,7 +246,9 @@ export const map = <
   });
 };
 /** Creates an object type. */
-export const obj = <const A extends { [_: string]: Type }>(kind: A) => {
+export const obj = <const A extends { [_: string]: Type }>(
+  kind: A,
+): Type<A, { [B in keyof A]: As<A[B]> }> => {
   const a = Object.keys(kind), b = length([a.length, a.length]);
   return new Type(kind, ($, row) => {
     const c = b($);
