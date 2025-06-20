@@ -20,7 +20,9 @@ export abstract class Type<A, B> {
   really(): Type<A, NonNullable<B>> {
     return this.nil = wrap("valueMissing"), this as Type<A, NonNullable<B>>;
   }
-  protected abstract decode($: string, row: Row): B | symbol;
+  /** Parses the specified type from a string. */
+  protected abstract decode($: string, row: Row): NonNullable<B> | symbol;
+  /** Stringifies the specified type. */
   protected abstract encode($: NonNullable<B>, row: Row): string;
   /** Creates a type for parsing and stringifying CSV data. */
   constructor(public kind: A) {}
@@ -127,22 +129,27 @@ class Opt<A extends [string, ...string[]]> extends Type<A, A[number]> {
     return fix($);
   }
 }
+/** Key as a base64url string with some extra properties. */
 export type KeyString<A extends "pkey" | "skey"> = string & {
   [Key.KEY_HALF]: A;
   [Key.KEY_DATA]: Uint8Array;
 };
+/** Key type. */
 export class Key<A extends "pkey" | "skey"> extends Type<A, KeyString<A>> {
+  /** Creates a new `KeyString` from the underlying bytes. */
   static make<A extends "pkey" | "skey">(kind: A, $: Uint8Array): KeyString<A> {
     return Object.assign(b_s64($), { [Key.KEY_HALF]: kind, [Key.KEY_DATA]: $ });
   }
-  /** Type of key (public/secret). */
+  /** Symbol for a key's type (public/secret). */
   static readonly KEY_HALF = Symbol("KEY_HALF");
-  /** Key's underlying bytes. */
+  /** Symbol for a key's underlying bytes. */
   static readonly KEY_DATA = Symbol("KEY_DATA");
+  /** Parses a `KeyString` from a string. */
   protected decode($: string): KeyString<A> | symbol {
     if (!/^[-\w]{43}$/.test($)) return wrap("badInput");
     return Key.make(this.kind, s64_b($));
   }
+  /** Stringifies a `KeyString` (empty if invalid). */
   protected encode($: KeyString<A>): string {
     return /^[-\w]{43}$/.exec($)?.[0] ?? "A".repeat(43);
   }
