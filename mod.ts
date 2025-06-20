@@ -284,7 +284,7 @@ class Vec<A extends Type<{}, any>> extends List<A, As<A>[]> {
 }
 class Map<A extends Type<{}, any>> extends List<A, { [key: string]: As<A> }> {
   /** Type of each field's key. */
-  readonly keys: Type<"char", string>;
+  readonly keys: Type<any, string>;
   constructor(kind: A, meta: MinMax<{ unique: boolean; keys: Str<"char"> }>) {
     super(kind, meta);
     this.keys = (meta.keys ?? new Str("char", {})).really();
