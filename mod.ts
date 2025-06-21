@@ -70,7 +70,7 @@ export type As<A> = A extends Type<any, infer B> ? All<B> : never;
 export const fix = ($: string): string =>
   $.normalize("NFC").replace(/\p{Cs}/gu, "\ufffd")
     .replace(/\r\n|\p{Zl}|\p{Zp}/gu, "\n").replace(/\p{Zs}/gu, " ");
-class Flag<A extends Word> {
+class Bits<A extends Word> {
   /** Creates a getter for the set bits. */
   constructor(public bits: number) {}
   /** Checks if a bit is set. */
@@ -90,11 +90,11 @@ export const opt = ((kind: [string, ...string[]] | [Word, ...Word[]]) => {
     const b = parseInt($, 16);
     if (Number.isNaN(b) || $ !== b.toString(16)) return wrap("badInput");
     if (b !== (b & a) >>> 0) return wrap("typeMismatch");
-    return new Flag(b);
+    return new Bits(b);
   }, ($) => $.bits.toString(16));
 }) as {
   <A extends [string, ...string[]]>(kind: A): Type<A, A[number]>;
-  <A extends [Word, ...Word[]]>(kind: A): Type<A, Flag<A[number]>>;
+  <A extends [Word, ...Word[]]>(kind: A): Type<A, Bits<A[number]>>;
 };
 /** Symbol for a key's type (public/secret). */
 export const KEY_HALF = Symbol("KEY_HALF");
