@@ -85,11 +85,11 @@ export const opt = ((kind: [string, ...string[]] | [Word, ...Word[]]) => {
     return new Type(kind, ($) => a($ = fix($)) ? $ : wrap("badInput"), fix);
   }
   let a = 0;
-  for (let z = 0; z < kind.length; ++z) a |= 1 << kind[z];
+  for (let z = 0; z < kind.length; ++z) a = (a | 1 << kind[z]) >>> 0;
   return new Type(kind, ($) => {
     const b = parseInt($, 16);
     if (Number.isNaN(b) || $ !== b.toString(16)) return wrap("badInput");
-    if (b !== (b & a)) return wrap("typeMismatch");
+    if (b !== (b & a) >>> 0) return wrap("typeMismatch");
     return new Flag(b);
   }, ($) => $.bits.toString(16));
 }) as {
