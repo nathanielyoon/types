@@ -139,12 +139,12 @@ export const iso = <const A extends "time" | "date">(
 ): Type<A, Date> => {
   const [a, b] = range(kind, meta), c = kind === "time" ? "1970-01-01T" : "";
   return new Type(kind, ($) => {
-    const d = new Date(`${c}${$}Z`), e = +d;
+    const d = new Date(c + $.replace(/([.:]\d+).*?$/, "$&Z")), e = +d;
     if (Number.isNaN(e)) return wrap("badInput");
     if (e < a) return wrap("rangeUnderflow");
     if (e > b) return wrap("rangeOverflow");
     return d;
-  }, ($) => $.toISOString().slice(0, -1).replace(c, ""));
+  }, ($) => $.toISOString().slice(0, -1).slice(c.length));
 };
 /** Creates a number type. */
 export const num = <const A extends "uint" | "real">(
