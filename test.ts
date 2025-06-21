@@ -7,6 +7,7 @@ import {
   iso,
   Json,
   key,
+  make,
   map,
   num,
   obj,
@@ -17,6 +18,7 @@ import {
   vec,
   wrap,
 } from "./mod.ts";
+import { b_s64 } from "@nyoon/base";
 
 Deno.test("symbol", () => {
   assertEquals(open(Symbol("")), null);
@@ -133,3 +135,13 @@ Deno.test("opt", () => {
   const c = assert_ok(opt(b), ["f".repeat(8)]);
   for (const $ of b) assertEquals(c.has($), 1);
 });
+Deno.test("key", () =>
+  assert(
+    fc.constantFrom("pkey", "skey"),
+    fc.uint8Array({ minLength: 32, maxLength: 32 }).map(b_s64),
+    fc.oneof(
+      fc.uint8Array({ maxLength: 31 }),
+      fc.uint8Array({ minLength: 33 }),
+    ).map(b_s64),
+    (kind, ok, no) => [key(kind), [ok], [[no, "badInput"]]],
+  ));
