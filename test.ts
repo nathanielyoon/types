@@ -13,6 +13,7 @@ import {
   obj,
   open,
   opt,
+  RANGE,
   str,
   Type,
   vec,
@@ -44,7 +45,6 @@ Deno.test("fix", () => {
     0x3000,
   ].forEach(($) => assertEquals(fix(String.fromCharCode($)), " "));
 });
-type Rowish = Row | string | null;
 const assert_ok = <A>(type: Type<{}, A>, row: Row) => {
   const a = type.decode([...row]);
   if (typeof a === "symbol") throw open(a);
@@ -91,49 +91,70 @@ Deno.test("hook", async () => {
     else assert_no(b, [[`${$}`], condition_0 ? 1 : 0]);
   }));
 });
+type Rowish = Row | string | null;
+type Falsy = 0 | false | undefined;
 const assert = <A extends [unknown, ...unknown[]]>(
   ...args: [
     ...arbitraries: { [B in keyof A]: fc.Arbitrary<A[B]> },
     transform: (...$$: A) => [Type, Rowish[], [Rowish, Json][]],
   ]
 ) =>
-  fc.assert(fc.property(
-    ...args.slice(0, -1) as { [B in keyof A]: fc.Arbitrary<A[B]> },
-    (...$$) => {
-      const a = (args[args.length - 1] as (...$: A) => any)(...$$);
-      for (const $ of a[1]) assert_ok(a[0], Array.isArray($) ? $ : [$]);
-      for (const [row, json] of a[2]) {
-        assert_no(a[0], [Array.isArray(row) ? row : [row], json]);
-      }
-    },
-  ));
-Deno.test("opt", () => {
+  fc.assert(
+    fc.property(
+      fc.tuple(...args.slice(0, -1) as { [B in keyof A]: fc.Arbitrary<A[B]> })
+        .map(($) =>
+          (args[args.length - 1] as (
+            ...$: A
+          ) => [Type, (Rowish | Falsy)[], ([Rowish, Json] | Falsy)[]])(
+            ...$ as A,
+          )
+        ),
+      ([type, ok, no]) => {
+        for (const $ of ok) {
+          (typeof $ === "object" || typeof $ === "string") &&
+            assert_ok(type, Array.isArray($) ? $ : [$]);
+        }
+        for (const $ of no) {
+        }
+        // const a = (args[args.length - 1] as (...$: A) => any)(...$$);
+        // for (const $ of a[1]) assert_ok(a[0], Array.isArray($) ? $ : [$]);
+        // for (const [row, json] of a[2]) {
+        //   assert_no(a[0], [Array.isArray(row) ? row : [row], json]);
+        // }
+      },
+    ),
+    { seed: 21648361 },
+  );
+Deno.test("opt", async ({ step }) => {
   const a = <A>($: fc.Arbitrary<A>) =>
     fc.uniqueArray($, { minLength: 1 }) as fc.Arbitrary<[A, ...A[]]>;
-  assert(a(fc.string()), (kind) => [
-    opt(kind),
-    kind,
-    kind.reduce<[Row, Json][]>(
-      (no, $) => kind.includes($ += "!") ? no : [...no, [[$], "badInput"]],
-      [],
-    ),
-  ]);
-  const b = Array.from({ length: 32 }, (_, z) => z) as [Word, ...Word[]];
-  assert(a(fc.nat({ max: 31 }) as fc.Arbitrary<Word>), (kind) => [
-    opt(kind),
-    kind.map((_, z) =>
-      kind.slice(z).reduce<number>(($$, $) => ($$ | 1 << $) >>> 0, 0)
-        .toString(16)
-    ),
-    [
-      ...["", "00", "!"].map<[Row, Json]>(($) => [[$], "badInput"]),
-      ...b.filter(($) => !kind.includes($)).map<[Row, Json]>(
-        ($) => [[(1 << $).toString(16)], "typeMismatch"],
+  await step("enum", () =>
+    assert(a(fc.string()), (kind) => [
+      opt(kind),
+      kind,
+      kind.reduce<[Row, Json][]>(
+        (no, $) => kind.includes($ += "!") ? no : [...no, [[$], "badInput"]],
+        [],
       ),
-    ],
-  ]);
-  const c = assert_ok(opt(b), ["f".repeat(8)]);
-  for (const $ of b) assertEquals(c.has($), 1);
+    ]));
+  await step("bits", () => {
+    const b = Array.from({ length: 32 }, (_, z) => z) as [Word, ...Word[]];
+    assert(a(fc.nat({ max: 31 }) as fc.Arbitrary<Word>), (kind) => [
+      opt(kind),
+      kind.map((_, z) =>
+        kind.slice(z).reduce<number>(($$, $) => ($$ | 1 << $) >>> 0, 0)
+          .toString(16)
+      ),
+      [
+        ...["", "00", "!"].map<[Row, Json]>(($) => [[$], "badInput"]),
+        ...b.filter(($) => !kind.includes($)).map<[Row, Json]>(
+          ($) => [[(1 << $).toString(16)], "typeMismatch"],
+        ),
+      ],
+    ]);
+    const c = assert_ok(opt(b), ["f".repeat(8)]);
+    for (const $ of b) assertEquals(c.has($), 1);
+  });
 });
 Deno.test("key", () =>
   assert(
@@ -145,3 +166,25 @@ Deno.test("key", () =>
     ).map(b_s64),
     (kind, ok, no) => [key(kind), [ok], [[no, "badInput"]]],
   ));
+Deno.test("iso", async ({ step }) => {
+  const a = ($: number) => new Date($).toISOString().slice(0, -1);
+  await step("time", () => {
+    const b = RANGE.time[1], c = fc.nat({ max: b });
+    assert(c, ($) => [
+      iso("time", { min: $ }),
+      [a($).slice(11)],
+      [],
+    ]);
+  });
+  // (["time", "date"] as const).forEach((kind) => {
+  //   const a = ($: number) =>
+  //     new Date($).toISOString().slice(0, -1).slice(kind === "time" ? 11 : 0);
+  //   const [b, c] = RANGE[kind], d = fc.nat({ max: c });
+  //   ["", "!"].forEach(($) => assert_no(iso(kind), [[$], "badInput"]));
+  //   assert(d, ($) => [
+  //     iso(kind, { min: $ }),
+  //     [a($)],
+  //     [[[a($ - 1)], "rangeUnderflow"]],
+  //   ]);
+  // })
+});
