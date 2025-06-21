@@ -26,38 +26,41 @@ export class Type<A = {}, B = any> {
     private parse: ($: string, row: Row) => NonNullable<B> | symbol,
     private stringify: ($: NonNullable<B>, row: Row) => string,
   ) {}
-  private hooks = {
-    decode_0: (() => {}) as ($: Row) => any,
-    decode_1: (($) => $) as ($: B) => B | symbol,
-    encode_0: (($) => $) as ($: B) => B,
-    encode_1: (() => {}) as ($: Row) => void,
-  };
+  private hooks: {
+    decode_0?: ($: Row) => any;
+    decode_1?: ($: B) => B | symbol;
+    encode_0?: ($: B) => B;
+    encode_1?: ($: Row) => void;
+  } = {};
   /** Hooks into one of the steps. */
-  on<A extends keyof typeof this.hooks>(on: A, to: typeof this.hooks[A]): this {
-    const a = this.hooks[on];
-    this.hooks[on] = ($: any) => {
-      const b = a($);
-      return (typeof b === "symbol" ? b : to(b ?? $));
+  on<A extends keyof typeof this.hooks>(
+    onto: A,
+    hook: NonNullable<typeof this.hooks[A]>,
+  ): this {
+    const a = this.hooks[onto];
+    this.hooks[onto] = ($: any) => {
+      const b = a?.($);
+      return (typeof b === "symbol" ? b : hook(b ?? $));
     };
     return this;
   }
   /** Converts a CSV row to the specified type or a `symbol` (error). */
   decode($: Row): B | symbol {
-    const a = this.hooks.decode_0($);
+    const a = this.hooks.decode_0?.($);
     if (typeof a === "symbol") return a;
     const b = $.shift();
     if (b == null) return this.nil;
     const c = this.parse(b, $);
     if (typeof c === "symbol") return c;
-    return this.hooks.decode_1(c);
+    return this.hooks.decode_1?.(c) ?? c;
   }
   /** Converts the specified type to a CSV row (or portion thereof). */
   encode($: B): Row {
     const a: Row = [];
-    $ = this.hooks.encode_0($);
+    $ = this.hooks.encode_0?.($) ?? $;
     if ($ == null) a.push(null);
     else a.unshift(this.stringify($, a));
-    return this.hooks.encode_1(a), a;
+    return this.hooks.encode_1?.(a), a;
   }
 }
 type All<A> = A extends number | string | Date ? A : { [B in keyof A]: A[B] };
