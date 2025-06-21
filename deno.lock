@@ -4,6 +4,7 @@
     "jsr:@nyoon/base@^2.1.1": "2.1.1",
     "jsr:@nyoon/csv@^1.0.9": "1.0.9",
     "jsr:@nyoon/schema@1": "1.0.0",
+    "jsr:@nyoon/schema@1.0.0": "1.0.0",
     "jsr:@nyoon/x25519@^1.0.7": "1.0.7",
     "jsr:@std/assert@^1.0.13": "1.0.13",
     "jsr:@std/internal@^1.0.6": "1.0.8",
