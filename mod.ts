@@ -27,10 +27,10 @@ export class Type<A = {}, B = any> {
     private stringify: ($: NonNullable<B>, row: Row) => string,
   ) {}
   private hooks: {
-    decode_0?: ($: Row) => void;
-    decode_1?: ($: B) => B | symbol;
-    encode_0?: ($: B) => B;
-    encode_1?: ($: Row) => void;
+    decode_0?: ($: Row) => undefined | null;
+    decode_1?: ($: B) => NonNullable<B> | symbol;
+    encode_0?: ($: B) => NonNullable<B>;
+    encode_1?: ($: Row) => undefined | null;
   } = {};
   /** Hooks into one of the steps. */
   on<A extends keyof typeof this.hooks>(
