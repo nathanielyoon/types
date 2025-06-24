@@ -27,7 +27,7 @@ export class Type<A = {}, B = any> {
     private stringify: ($: NonNullable<B>, row: Row) => string,
   ) {}
   private hooks: {
-    decode_0?: ($: Row) => any;
+    decode_0?: ($: Row) => void;
     decode_1?: ($: B) => B | symbol;
     encode_0?: ($: B) => B;
     encode_1?: ($: Row) => void;
@@ -40,7 +40,7 @@ export class Type<A = {}, B = any> {
     const a = this.hooks[onto], b = hook.bind(this);
     this.hooks[onto] = (($: any) => {
       const c = a?.($);
-      return (typeof c === "symbol" ? c : b(c ?? $));
+      return (typeof c === "symbol" ? c : b(c ?? $) ?? c ?? $);
     }).bind(this);
     return this;
   }
