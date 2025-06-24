@@ -37,10 +37,10 @@ export class Type<A = {}, B = any> {
     onto: A,
     hook: NonNullable<typeof this.hooks[A]>,
   ): this {
-    const a = this.hooks[onto];
+    const a = this.hooks[onto], b = hook.bind(this);
     this.hooks[onto] = (($: any) => {
-      const b = a?.($);
-      return (typeof b === "symbol" ? b : hook(b ?? $));
+      const c = a?.($);
+      return (typeof c === "symbol" ? c : b(c ?? $));
     }).bind(this);
     return this;
   }
