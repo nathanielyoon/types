@@ -93,8 +93,8 @@ export const opt = ((kind: [string, ...string[]] | [Word, ...Word[]]) => {
     return new Bits(b);
   }, ($) => $.bits.toString(16));
 }) as {
-  <A extends [string, ...string[]]>(kind: A): Type<A, A[number]>;
-  <A extends [Word, ...Word[]]>(kind: A): Type<A, Bits<A[number]>>;
+  <const A extends [string, ...string[]]>(kind: A): Type<A, A[number]>;
+  <const A extends [Word, ...Word[]]>(kind: A): Type<A, Bits<A[number]>>;
 };
 /** Symbol for a key's type (public/secret). */
 export const KEY_HALF = Symbol("KEY_HALF");
@@ -109,7 +109,9 @@ export type Key<A extends "pkey" | "skey"> = string & {
 export const make = <A extends "pkey" | "skey">(as: A, $: Uint8Array): Key<A> =>
   Object.assign(b_s64($), { [KEY_HALF]: as, [KEY_DATA]: $ });
 /** Creates a key type. */
-export const key = <A extends "pkey" | "skey">(kind: A): Type<A, Key<A>> =>
+export const key = <const A extends "pkey" | "skey">(
+  kind: A,
+): Type<A, Key<A>> =>
   new Type(
     kind,
     ($) => /^[-\w]{43}$/.test($) ? make(kind, s64_b($)) : wrap("badInput"),
