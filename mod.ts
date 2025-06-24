@@ -139,7 +139,7 @@ export const iso = <const A extends "time" | "date">(
 ): Type<A, Date> => {
   const [a, b] = range(kind, meta), c = kind === "time" ? "1970-01-01T" : "";
   return new Type(kind, ($) => {
-    const d = new Date(c + $.replace(/([.:]\d+).*?$/, "$&Z")), e = +d;
+    const d = new Date(c + $.replace(/(?:[+-]\d\d:\d\d|Z)?$/, "Z")), e = +d;
     if (Number.isNaN(e)) return wrap("badInput");
     if (e < a) return wrap("rangeUnderflow");
     if (e > b) return wrap("rangeOverflow");
